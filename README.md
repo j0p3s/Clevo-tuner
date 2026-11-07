@@ -330,6 +330,8 @@ lines 11–20  GPU fan % at 40, 45, 50, 55, 60, 65, 70, 75, 80, 85 °C
 
 ## Starting with Windows / Task Scheduler
 
+Enabled startup tasks are refreshed to the current executable/script path when you open a new version. Keep the app in a permanent folder and open the new version once after updating. Task errors appear in the app log.
+
 **From the app (recommended):** enable **Start with Windows (at sign-in)**. The option is in three places that stay in sync: **Settings → Application**, the **Profiles** panel, and the tray menu (**Start with Windows**, with a check mark). It creates a scheduled task named `ClevoTune` that:
 
 - runs at your logon with highest privileges, so there is no UAC prompt

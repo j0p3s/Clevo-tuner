@@ -15,7 +15,7 @@ exit /b
 # https://github.com/j0p3s/Clevo-tuner
 $ErrorActionPreference = 'Stop'
 $AppName    = 'ClevoTune'
-$AppVersion = '1.6.5'
+$AppVersion = '1.6.6'
 
 $Self = $env:CT_SELF
 if (-not $Self) { $Self = $PSCommandPath }
@@ -3402,17 +3402,22 @@ function Test-AutoStart { try { return [bool](Get-ScheduledTask -TaskName $TaskN
 function Set-AutoStart([bool]$on) {
     if ($on) {
         $p = $Self.Replace("'", "''")
-        $arg = "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -Command `"`$env:CT_SELF='$p'; `$env:CT_ARGS='/tray'; iex ([IO.File]::ReadAllText(`$env:CT_SELF))`""
+        # Encode the script so spaces, apostrophes and Unicode paths survive task quoting.
+        $command = "`$env:CT_SELF='$p'; `$env:CT_ARGS='/tray'; iex ([IO.File]::ReadAllText(`$env:CT_SELF))"
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+        $arg = "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -EncodedCommand $encoded"
         $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
         if ($env:CT_EXE -eq '1') { $act = New-ScheduledTaskAction -Execute $Self -Argument '/tray' -WorkingDirectory $SelfDir }
-        else { $act = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $arg }
+        else { $act = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $arg -WorkingDirectory $SelfDir }
         $trg = New-ScheduledTaskTrigger -AtLogOn -User $user
         $trg.Delay = 'PT15S'
         $prn = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
-        $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-        Register-ScheduledTask -TaskName $TaskName -Action $act -Trigger $trg -Principal $prn -Settings $set -Description (T 'ClevoTune: GPU profile + fan curves at logon') -Force | Out-Null
+        $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable
+        Register-ScheduledTask -TaskName $TaskName -Action $act -Trigger $trg -Principal $prn -Settings $set -Description (T 'ClevoTune: GPU profile + fan curves at logon') -Force -ErrorAction Stop | Out-Null
     } else {
-        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
+        }
     }
 }
 $ui.ChkApplyOnOpen.Add_Click({
@@ -3433,8 +3438,9 @@ function Set-StartWithWindows([bool]$want) {
         Set-Status (T 'Could not create the scheduled task — see log') $Red
     }
     # keep every copy of the option in sync with the real state of the task
-    $on = [bool]$script:Cfg.autoApply -and (Test-AutoStart)
+    $on = Test-AutoStart
     $script:Cfg.autoApply = $on
+    Save-Config
     $ui.ChkAutoApply.IsChecked = $on
     $ui.ChkStartup.IsChecked = $on
     Update-AutoChip
@@ -4234,8 +4240,12 @@ $ui.SlOvlOp.Value = [double]$o.opacity; $ui.ValOvlOp.Text = ('{0:0} %' -f $ui.Sl
 $ui.OvlCpu.IsChecked = [bool]$o.cpu; $ui.OvlGpu.IsChecked = [bool]$o.gpu; $ui.OvlClk.IsChecked = [bool]$o.clk; $ui.OvlFan.IsChecked = [bool]$o.fan; $ui.OvlMem.IsChecked = [bool]$o.mem
 $script:Loading = $false
 
-$taskExists = Test-AutoStart
-if ($script:Cfg.autoApply -and -not $taskExists) { $script:Cfg.autoApply = $false }
+# Refresh the action to this version's path whenever startup is enabled.
+if ($script:Cfg.autoApply) {
+    try { Set-AutoStart $true } catch { Log ((T 'Scheduled task failed: {0}') -f $_.Exception.Message) }
+}
+$script:Cfg.autoApply = Test-AutoStart
+Save-Config
 $ui.ChkAutoApply.IsChecked = [bool]$script:Cfg.autoApply
 $ui.ChkStartup.IsChecked = [bool]$script:Cfg.autoApply
 Build-TrayMenu

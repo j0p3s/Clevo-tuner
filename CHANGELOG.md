@@ -2,6 +2,11 @@
 
 All notable changes to ClevoTune. Versions follow [Semantic Versioning](https://semver.org/).
 
+## v1.6.6
+- Harden Windows Task Scheduler startup: elevated interactive logon, 15-second delay, battery support, unlimited runtime and missed-start recovery.
+- Safely encode CMD launch paths and set the working directory for both launchers.
+- Report task creation/removal failures and refresh enabled startup tasks when opening a new app version.
+
 ## [1.6.5] - 2026-11-07
 ### Fixed
 - Slow mVolt+ commands and update downloads keep the UI dispatcher, sensor polling and fan-control timer running. Concurrent tuning operations are blocked; timed-out subprocesses are terminated.

@@ -4,7 +4,7 @@
 - A single-file Windows tool (`.exe` + equivalent `.cmd`) for the owner's Clevo P775DM3-G (i7-8700K + RTX 3080 Laptop, DEV_24DC, vBIOS 94.04.46.00.15, driver 621.12): live sensors, GPU tuning and custom EC fan curves. It replaces Clevo Control Center and MSI Afterburner on this laptop.
 
 ## 2. Current status
-- **v1.6.5 released** (`main` + release v1.6.5, assets `ClevoTune.v1.6.5.{zip,exe,cmd}`). Earlier versions were tested on the user's hardware with these features working; v1.6.5 has automated Windows validation but still needs hardware confirmation:
+- **v1.6.6** (`main` + release v1.6.5, assets `ClevoTune.v1.6.5.{zip,exe,cmd}`). Earlier versions were tested on the user's hardware with these features working; v1.6.5 has automated Windows validation but still needs hardware confirmation:
   - sensors
   - fan curves (temperature/load, ClevoFanControl import/export)
   - core/memory offsets and clock lock
@@ -74,5 +74,5 @@
 - **GitHub asset names:** spaces and parentheses become dots. The files inside the zip keep `ClevoTune (vX.Y.Z)`.
 - **Line endings:** `ClevoTune.cmd` is stored with `-text` (CRLF); batch breaks with LF.
 - **Config:** `%APPDATA%\ClevoTune\config.json`. `powerLocked` / `powerMax` are keyed by driver version.
-- **Scheduled task:** if the user moves to a new version folder, they must toggle "Start with Windows" off and on again.
+- **Scheduled task:** enabled startup is refreshed to the current version path on launch. Elevated interactive logon, 15 s delay, battery support, StartWhenAvailable, unlimited runtime; registration/removal errors terminate and are logged. `tests/startup.ps1` validates task construction without registering a real task.
 - **Clevo Control Center** must be closed, or it overrides the fan curves.
