@@ -1,0 +1,75 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
+using System.Text;
+using System.Windows.Forms;
+
+[assembly: AssemblyTitle("ClevoTune")]
+[assembly: AssemblyProduct("ClevoTune")]
+[assembly: AssemblyDescription("Monitor, GPU tuning and EC fan curves for Clevo P775DM3-G")]
+[assembly: AssemblyVersion(ClevoTune.Launcher.Version + ".0")]
+[assembly: AssemblyFileVersion(ClevoTune.Launcher.Version + ".0")]
+[assembly: AssemblyInformationalVersion(ClevoTune.Launcher.Version)]
+
+namespace ClevoTune
+{
+    static class Launcher
+    {
+        public const string Version = "__VERSION__";
+
+        [STAThread]
+        static int Main(string[] args)
+        {
+            try
+            {
+                string exe = Process.GetCurrentProcess().MainModule.FileName;
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClevoTune");
+                Directory.CreateDirectory(dir);
+                string ps1 = Path.Combine(dir, "ClevoTune-" + Version + ".ps1");
+
+                byte[] script;
+                using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("ClevoTune.script.ps1"))
+                using (MemoryStream m = new MemoryStream())
+                {
+                    s.CopyTo(m);
+                    script = m.ToArray();
+                }
+                // UTF-8 with BOM so Windows PowerShell 5.1 reads the accented text correctly
+                byte[] bom = new byte[] { 0xEF, 0xBB, 0xBF };
+                byte[] data = new byte[bom.Length + script.Length];
+                Buffer.BlockCopy(bom, 0, data, 0, bom.Length);
+                Buffer.BlockCopy(script, 0, data, bom.Length, script.Length);
+                bool same = File.Exists(ps1) && Equal(File.ReadAllBytes(ps1), data);
+                if (!same) File.WriteAllBytes(ps1, data);
+
+                string psExe = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+                ProcessStartInfo psi = new ProcessStartInfo(psExe);
+                psi.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File \"" + ps1 + "\"";
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true;
+                psi.WorkingDirectory = Path.GetDirectoryName(exe);
+                psi.EnvironmentVariables["CT_SELF"] = exe;
+                psi.EnvironmentVariables["CT_ARGS"] = string.Join(" ", args);
+                psi.EnvironmentVariables["CT_EXE"] = "1";
+                using (Process p = Process.Start(psi))
+                {
+                    p.WaitForExit();
+                    return p.ExitCode;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Não foi possível iniciar o ClevoTune:\n\n" + ex.Message, "ClevoTune", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
+            }
+        }
+
+        static bool Equal(byte[] a, byte[] b)
+        {
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+            return true;
+        }
+    }
+}
