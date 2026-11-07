@@ -158,7 +158,8 @@ Below are 12 cards with the current value and a 60-second graph:
 
 - **Apply to GPU** writes all four values.
 - **Reset to stock** restores the default power limit, sets both offsets to 0 and removes the clock lock.
-- **Refresh readback** reads the current values back from the card.
+- **Refresh readback** reads the current values back from the card, including a fresh mVolt+ power-limit status.
+- **Re-check power limits** clears remembered power restrictions and reads current limits after an external mVolt+ BIOS override. It does not apply a profile or change GPU settings. The slider includes an observed enforced limit above the stock range; the theoretical maximum is never used.
 - Each row shows what is actually on the card ("on card: …") next to the slider value.
 
 **Undervolting on Ampere:** set a clock limit (e.g. 1800 MHz) and a positive core offset (e.g. +150 MHz). The GPU then reaches 1800 MHz at the voltage it would normally use for about 1650 MHz. ClevoTune does not set an absolute voltage. Public NVIDIA interfaces do not allow that on RTX 30 series cards, so use a dedicated tool such as mVolt+ for direct voltage control.
@@ -226,7 +227,7 @@ Curves are also saved to the settings automatically whenever you change them.
 
 A small always-on-top text box with CPU (temp/load/W), GPU (temp/load/W), GPU clocks, fan speeds and RAM/VRAM.
 
-- Choose the corner, font size, background opacity and which lines to show.
+- Choose a corner or **Center**, font size, background opacity and which lines to show. Center positions the overlay in the middle of the primary display’s work area and stays centered when its size changes.
 - It is click-through, so it never blocks the mouse.
 - It shows over windowed and borderless games but not over exclusive full-screen games.
 - It does not show FPS.
@@ -314,8 +315,8 @@ lines 11–20  GPU fan % at 40, 45, 50, 55, 60, 65, 70, 75, 80, 85 °C
   - below the default limit: `--power-cap-watts <W>` (lowers the limit)
   - exactly the default: `--return-to-percentage` (releases the cap)
   - above the default: `--power <whole-number percent>`, then `--power-cap-watts <W>` if the percentage control is unavailable
-  - afterwards `--status` is read and the enforced limit is shown as "on card: … W (mVolt+)". If the card enforces less than requested, that value is remembered as the real maximum for this driver and the slider is capped there.
-  - On the P775DM3-G's RTX 3080, mVolt+ can lower the limit but not raise it above the 160 W default.
+  - afterwards `--status` is read and the enforced limit is shown as "on card: … W (mVolt+)". If the card enforces less than requested, a ceiling is remembered for this driver and the slider is capped there. Use **Re-check power limits** after changing the BIOS override to discard that cached ceiling. If status is missing or invalid, the request is marked unverified; the requested wattage is never substituted as readback.
+  - Without a BIOS override, earlier tests on the P775DM3-G's RTX 3080 could lower the limit but did not raise it above the 160 W default. An external mVolt+ BIOS override can change the reported active limit; confirm the enforced limit and actual power consumption separately under load.
   - If mVolt+ refuses everything, the slider is disabled for this driver version. A power value equal to what the card already enforces is not sent again.
 - **Core voltage offset:** runs `mVolt+ --core-vdemand <mV>` whenever the value differs from the one last applied.
 - Power and voltage are sent in separate mVolt+ calls, so a refused option doesn't block the other. Every command, exit code and output is written to the log.

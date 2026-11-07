@@ -5,9 +5,13 @@
 name=English
 code=en-us
 base=en
-version=1.6.3
+version=1.6.4
 
 [strings]
+Center=Center
+Re-check power limits=Re-check power limits
+Power request unverified=Power request unverified
+Power limits rechecked; no tuning applied=Power limits rechecked; no tuning applied
 The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.=The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.
 Check for mVolt+ updates=Check for mVolt+ updates
 Checking mVolt+ updates…=Checking mVolt+ updates…

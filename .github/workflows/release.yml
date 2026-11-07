@@ -13,7 +13,23 @@ permissions:
   contents: write
 
 jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate script and translations
+        run: python build.py --no-exe
+      - name: Validate Windows runtime compatibility and regressions
+        shell: powershell
+        run: |
+          & ./tests/validate.ps1
+          & ./tests/power-limits.ps1
+
   release:
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

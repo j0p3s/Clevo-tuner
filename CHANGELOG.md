@@ -2,6 +2,17 @@
 
 All notable changes to ClevoTune. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.6.4] - 2026-11-07
+### Added
+- **Center** overlay position, saved with the other overlay settings and maintained when the overlay resizes.
+- **Re-check power limits** clears remembered power restrictions and reads current NVML/mVolt+ limits after an external BIOS override, without applying tuning.
+### Fixed
+- The power slider can include a currently observed enforced limit above the stock range; mVolt+'s theoretical maximum is not used.
+- Missing or invalid mVolt+ power readback is reported as unverified instead of treating the requested wattage as enforced or caching a ceiling.
+- Refresh readback queries mVolt+ again; cached mVolt+ readback is discarded after automatic NVML reconnection.
+### Documentation
+- Clarified that the earlier 160 W ceiling applied to tests without a BIOS override, and that configured limits and measured power draw are separate.
+
 ## [1.6.3] - 2026-11-07
 ### Fixed
 - GPU readings after a driver/GPU reset (e.g. mVolt+ "Restart GPU" or resume from sleep): out-of-range values such as a 998277 MHz clock are rejected, and ClevoTune reconnects to NVML (and NVAPI) automatically when temperature and clock stay unreadable.

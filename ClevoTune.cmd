@@ -15,7 +15,7 @@ exit /b
 # https://github.com/j0p3s/Clevo-tuner
 $ErrorActionPreference = 'Stop'
 $AppName    = 'ClevoTune'
-$AppVersion = '1.6.3'
+$AppVersion = '1.6.4'
 
 $Self = $env:CT_SELF
 if (-not $Self) { $Self = $PSCommandPath }
@@ -26,6 +26,10 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, Sys
 
 # ---------------------------------------------------------------- languages (key = English text)
 $LangTable = @'
+Center	Centro	Centre	Centro	Mitte	Centro
+Re-check power limits	Rever limites de potência	Revérifier les limites de puissance	Volver a comprobar los límites de potencia	Leistungslimits erneut prüfen	Ricontrolla i limiti di potenza
+Power request unverified	Pedido de potência não verificado	Demande de puissance non vérifiée	Solicitud de potencia sin verificar	Leistungsanforderung nicht verifiziert	Richiesta di potenza non verificata
+Power limits rechecked; no tuning applied	Limites de potência revistos; sem aplicar ajustes	Limites de puissance revérifiées ; aucun réglage appliqué	Límites de potencia comprobados; sin aplicar ajustes	Leistungslimits erneut geprüft; keine Einstellungen angewendet	Limiti di potenza ricontrollati; nessuna regolazione applicata
 The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.	A placa continua a aplicar {0} W: nesta GPU o limite de potência pode ser baixado, mas não subir acima de {1} W. O máximo do slider passa a ser {1} W.	La carte applique toujours {0} W : sur ce GPU la limite de puissance peut être abaissée, mais pas relevée au-dessus de {1} W. Le maximum du curseur est maintenant {1} W.	La tarjeta sigue aplicando {0} W: en esta GPU el límite de potencia puede bajarse, pero no subir por encima de {1} W. El máximo del control pasa a ser {1} W.	Die Karte erzwingt weiterhin {0} W: Auf dieser GPU kann das Leistungslimit gesenkt, aber nicht über {1} W angehoben werden. Das Reglermaximum ist jetzt {1} W.	La scheda applica ancora {0} W: su questa GPU il limite di potenza può essere abbassato, ma non alzato oltre {1} W. Il massimo del cursore ora è {1} W.
 Check for mVolt+ updates	Procurar atualizações do mVolt+	Rechercher des mises à jour de mVolt+	Buscar actualizaciones de mVolt+	Nach mVolt+-Updates suchen	Cerca aggiornamenti di mVolt+
 Checking mVolt+ updates…	A procurar atualizações do mVolt+…	Recherche de mises à jour de mVolt+…	Buscando actualizaciones de mVolt+…	Suche nach mVolt+-Updates…	Ricerca aggiornamenti di mVolt+…
@@ -1196,6 +1200,18 @@ namespace ClevoTune
             get { return NvmlOk && !double.IsNaN(MinPowerW) && !double.IsNaN(MaxPowerW) && MaxPowerW - MinPowerW >= 1; }
         }
 
+        // Refresh metadata and readback without writing GPU settings or running fan control.
+        public void RefreshPowerLimits()
+        {
+            DefaultPowerW = MinPowerW = MaxPowerW = GpuPowerLimit = double.NaN;
+            if (!NvmlOk) return;
+            uint a, b;
+            if (Nvml.GetDefaultLimit(dev, out a) == 0 && a > 0 && a < 1000000) DefaultPowerW = a / 1000.0;
+            if (Nvml.GetLimitConstraints(dev, out a, out b) == 0 && a > 0 && b >= a && b < 1000000)
+            { MinPowerW = a / 1000.0; MaxPowerW = b / 1000.0; }
+            if (Nvml.GetEnforcedLimit(dev, out a) == 0 && a > 0 && a < 1000000) GpuPowerLimit = a / 1000.0;
+        }
+
         public int SetPowerLimitW(double w) { return NvmlOk ? Nvml.SetPowerLimit(dev, (uint)Math.Round(w * 1000)) : 999; }
         public int LockClocks(int minMhz, int maxMhz) { return NvmlOk ? Nvml.SetLockedClocks(dev, (uint)minMhz, (uint)maxMhz) : 999; }
         public int ResetClocks() { return NvmlOk ? Nvml.ResetLockedClocks(dev) : 999; }
@@ -1939,15 +1955,27 @@ function Invoke-MVolt([string[]]$a, [int]$timeout = 30000) {
 function Get-MVoltStatus {
     try {
         $r = Invoke-MVolt @('--status') 20000
+        if ($r.Code -ne 0) { return $null }
         $i = $r.Raw.IndexOf('{')
         if ($i -lt 0) { return $null }
         return ($r.Raw.Substring($i) | ConvertFrom-Json)
     } catch { return $null }
 }
+# Only a finite, positive readback is evidence that a power request was enforced.
+function Get-MVoltEnforcedPower($status) {
+    if ($null -eq $status -or $null -eq $status.power_limits) { return [double]::NaN }
+    $value = $status.power_limits.enforced_mw
+    if ($value -is [string] -or $value -is [bool] -or $null -eq $value) { return [double]::NaN }
+    try { $mw = [double]$value } catch { return [double]::NaN }
+    if ([double]::IsNaN($mw) -or [double]::IsInfinity($mw) -or $mw -le 0 -or $mw -ge 1000000) { return [double]::NaN }
+    return $mw / 1000
+}
+
 if ($IsAdmin) { Update-MVolt $false }
 $script:MVolt = Find-MVolt
 $script:AppliedVolt = [int]$script:Cfg.lastVolt
 $script:MVoltPowerW = [double]::NaN
+$script:PowerUnverified = $false
 
 # ---------------------------------------------------------------- UI
 $Xaml = @'
@@ -2388,8 +2416,11 @@ $Xaml = @'
                         <Button x:Name="BtnApply" Style="{StaticResource BtnPrimary}" Content="Apply to GPU" Width="200" Height="44" FontSize="15"/>
                         <Button x:Name="BtnStock" Style="{StaticResource Btn}" Content="Reset to stock" Height="44" Margin="12,0,0,0" FontSize="14"/>
                       </StackPanel>
-                      <Button x:Name="BtnRefresh" Style="{StaticResource BtnLink}" Content="Refresh readback" HorizontalAlignment="Right" FontSize="14"/>
                     </Grid>
+                    <WrapPanel HorizontalAlignment="Right" Margin="0,8,0,0">
+                      <Button x:Name="BtnRecheckPower" Style="{StaticResource BtnLink}" Content="Re-check power limits" FontSize="14" Margin="0,0,16,0"/>
+                      <Button x:Name="BtnRefresh" Style="{StaticResource BtnLink}" Content="Refresh readback" FontSize="14"/>
+                    </WrapPanel>
                   </StackPanel>
                 </Border>
 
@@ -2551,6 +2582,7 @@ $Xaml = @'
                         <ComboBoxItem Content="Top right"/>
                         <ComboBoxItem Content="Bottom left"/>
                         <ComboBoxItem Content="Bottom right"/>
+                        <ComboBoxItem Content="Center"/>
                       </ComboBox>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Margin="0,0,24,0">
@@ -2902,13 +2934,18 @@ function Init-Tuning {
     if ($pm.Count -eq 2 -and $pm[0] -eq [string]$hw.Driver -and [double]$pm[1] -gt 0 -and -not [double]::IsNaN($maxW)) {
         $maxW = [Math]::Min($maxW, [double]$pm[1])   # measured: the card can't go above this
     }
+    # An externally applied BIOS override can exceed the stock advertised range.
+    # Use the observed enforced limit, never mVolt+'s theoretical maximum.
+    $activeW = $hw.GpuPowerLimit
+    if (-not [double]::IsNaN($script:MVoltPowerW)) { $activeW = $script:MVoltPowerW }
+    if (-not [double]::IsNaN($activeW) -and -not [double]::IsNaN($maxW)) { $maxW = [Math]::Max($maxW, $activeW) }
     if ($script:PowerCapable) {
         $ui.SlPower.IsEnabled = $true
         $ui.SlPower.Minimum = [Math]::Floor($minW)
         $ui.SlPower.Maximum = [Math]::Ceiling($maxW)
         $ui.LblPowerMin.Text = ('{0:0} W' -f $minW)
         $ui.LblPowerMax.Text = ('{0:0} W' -f $maxW)
-        if (-not [double]::IsNaN($hw.GpuPowerLimit)) { $ui.SlPower.Value = [Math]::Round($hw.GpuPowerLimit) } else { $ui.SlPower.Value = [Math]::Round($hw.DefaultPowerW) }
+        if (-not [double]::IsNaN($activeW)) { $ui.SlPower.Value = [Math]::Round($activeW) } else { $ui.SlPower.Value = [Math]::Round($hw.DefaultPowerW) }
     } else {
         $ui.SlPower.IsEnabled = $false
         $ui.LblPowerMin.Text = ''; $ui.LblPowerMax.Text = ''
@@ -2970,6 +3007,7 @@ function Update-Readback {
     }
     elseif ($hw.NvmlOk) { $ui.CardPower.Text = ((T 'on card: {0} W (not adjustable)') -f (Fmt $hw.GpuPowerLimit '0')) }
     else { $ui.CardPower.Text = (T 'NVML unavailable') }
+    if ($script:PowerUnverified) { $ui.CardPower.Text = (T 'Power request unverified') }
     $oi = [ClevoTune.NvApi]::GetOffsets()
     $script:OI = $oi
     if ($oi.Status -eq 0) {
@@ -3013,7 +3051,7 @@ function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$l
         }
         if ($pdone) {
             Log ((T 'Power {0} W: {1}') -f $power, $how)
-            $done += "$power W"; $script:MVoltPowerW = [double]::NaN
+            $done += "$power W"; $script:MVoltPowerW = [double]::NaN; $script:PowerUnverified = $false
         } elseif ($script:MVolt -and -not [double]::IsNaN($hw.DefaultPowerW)) {
             if ($how) { Log ((T 'Power {0} W: {1}') -f $power, ($how + ' → mVolt+')) }
             $mvPower = $power
@@ -3054,6 +3092,8 @@ function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$l
     }
     # mVolt+: power and voltage in separate calls, so one refused option doesn't block the other
     if ($mvPower -gt 0) {
+        $script:MVoltPowerW = [double]::NaN
+        $script:PowerUnverified = $true
         $def = $hw.DefaultPowerW
         $runs = @()
         if ($mvPower -lt $def - 0.5) { $runs += ,@('--power-cap-watts', (Inv '{0:0.###}' $mvPower)) }
@@ -3067,16 +3107,20 @@ function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$l
         }
         if ($r -and $r.Code -eq 0) {
             $s = Get-MVoltStatus
-            if ($s -and $s.power_limits -and $s.power_limits.enforced_mw) { $script:MVoltPowerW = [double]$s.power_limits.enforced_mw / 1000 } else { $script:MVoltPowerW = [double]$mvPower }
-            Log ((T 'mVolt+: {0}') -f ('power enforced ' + (Fmt $script:MVoltPowerW '0') + ' W'))
-            if ($script:MVoltPowerW -lt $mvPower - 1) {
+            $script:MVoltPowerW = Get-MVoltEnforcedPower $s
+            $script:PowerUnverified = [double]::IsNaN($script:MVoltPowerW)
+            if ($script:PowerUnverified) {
+                Log (T 'Power request unverified')
+                $ok = $false
+            } else { Log ((T 'mVolt+: {0}') -f ('power enforced ' + (Fmt $script:MVoltPowerW '0') + ' W')) }
+            if (-not $script:PowerUnverified -and $script:MVoltPowerW -lt $mvPower - 1) {
                 # accepted, but the card won't go that high: remember the real ceiling for this driver
                 $ceil = [int][Math]::Round([Math]::Max($script:MVoltPowerW, $def))
                 $script:Cfg.powerMax = [string]$hw.Driver + '|' + $ceil; $script:Dirty = $true
                 $ui.SlPower.Maximum = $ceil; $ui.LblPowerMax.Text = ('{0:0} W' -f $ceil)
                 Log ((T 'The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.') -f (Fmt $script:MVoltPowerW '0'), $ceil)
                 $ok = $false
-            } else { $done += "$mvPower W" }
+            } elseif (-not $script:PowerUnverified) { $done += "$mvPower W" }
         } else {
             $ok = $false
             $script:Cfg.powerLocked = [string]$hw.Driver + '|mvolt'; $script:Dirty = $true
@@ -3130,7 +3174,25 @@ $ui.BtnStock.Add_Click({
         Apply-Tuning $s.power 0 0 0 (T 'Stock:') 0
     } catch { Log ((T 'Error: {0}') -f $_.Exception.Message) }
 })
-$ui.BtnRefresh.Add_Click({ Update-Readback; Set-Status (T 'Values re-read from the card') $Green })
+function Read-PowerState {
+    $script:Hw.RefreshPowerLimits()
+    $script:MVoltPowerW = [double]::NaN
+    if ($script:MVolt) { $script:MVoltPowerW = Get-MVoltEnforcedPower (Get-MVoltStatus) }
+    $script:PowerUnverified = [double]::IsNaN($script:MVoltPowerW) -and [double]::IsNaN($script:Hw.GpuPowerLimit)
+}
+
+function Recheck-PowerLimits {
+    # Read-only hardware queries: no profiles, clock changes or fan commands.
+    $script:Cfg.powerMax = ''; $script:Cfg.powerLocked = ''; $script:Dirty = $true
+    Save-Config
+    Read-PowerState
+    Init-Tuning
+    $message = if ($script:PowerUnverified) { T 'Power request unverified' } else { T 'Power limits rechecked; no tuning applied' }
+    Log $message
+    Set-Status $message $(if ($script:PowerUnverified) { $Yellow } else { $Green })
+}
+$ui.BtnRecheckPower.Add_Click({ Recheck-PowerLimits })
+$ui.BtnRefresh.Add_Click({ Read-PowerState; Update-Readback; Set-Status (T 'Values re-read from the card') $Green })
 
 # ---------------------------------------------------------------- profiles
 function Profile-Text($p) {
@@ -3719,6 +3781,11 @@ function Position-Overlay {
     $wa = [System.Windows.SystemParameters]::WorkArea
     $m = 12
     $pos = [int]$script:Cfg.overlay.pos
+    if ($pos -eq 4) {
+        $ovl.Left = $wa.Left + ($wa.Width - $ovl.ActualWidth) / 2
+        $ovl.Top = $wa.Top + ($wa.Height - $ovl.ActualHeight) / 2
+        return
+    }
     if ($pos -eq 0 -or $pos -eq 2) { $ovl.Left = $wa.Left + $m } else { $ovl.Left = $wa.Right - $ovl.ActualWidth - $m }
     if ($pos -lt 2) { $ovl.Top = $wa.Top + $m } else { $ovl.Top = $wa.Bottom - $ovl.ActualHeight - $m }
 }
@@ -3960,7 +4027,7 @@ $script:Timer.Add_Tick({
         if ($dt -gt 10) { $dt = 1 }
         $script:Hw.Tick($dt)
         foreach ($m in $script:Hw.TakeMessages()) { Log $m }
-        if ($script:Hw.NvmlReinits -ne $script:SeenReinits) { $script:SeenReinits = $script:Hw.NvmlReinits; if ($script:Hw.NvmlOk) { Update-Header; Init-Tuning } }
+        if ($script:Hw.NvmlReinits -ne $script:SeenReinits) { $script:SeenReinits = $script:Hw.NvmlReinits; if ($script:Hw.NvmlOk) { $script:MVoltPowerW = [double]::NaN; Update-Header; Init-Tuning } }
         Update-Cards
         if ($win.IsVisible) {
             Update-FanUi

@@ -4,14 +4,15 @@
 - A single-file Windows tool (`.exe` + equivalent `.cmd`) for the owner's Clevo P775DM3-G (i7-8700K + RTX 3080 Laptop, DEV_24DC, vBIOS 94.04.46.00.15, driver 621.12): live sensors, GPU tuning and custom EC fan curves. It replaces Clevo Control Center and MSI Afterburner on this laptop.
 
 ## 2. Current status
-- **v1.6.3 released** (`main` + release v1.6.3, assets `ClevoTune.v1.6.3.{zip,exe,cmd}`). Built and tested on the user's hardware and working:
+- **v1.6.4 released** (`main` + release v1.6.4, assets `ClevoTune.v1.6.4.{zip,exe,cmd}`). Built and tested on the user's hardware and working:
   - sensors
   - fan curves (temperature/load, ClevoFanControl import/export)
   - core/memory offsets and clock lock
   - mVolt+ core voltage offset (`--core-vdemand` exit 0)
   - automatic PawnIO and mVolt+ install, tray, start with Windows, 6 languages
 - v1.6.3 (NVML reconnect after a GPU reset) has not yet been confirmed on the user's PC.
-- Nothing is in progress.
+- v1.6.4 adds read-only power-limit recheck after an external BIOS override, honest unverified mVolt+ readback, fresh readback on refresh, and Center overlay position. Windows regression/markup/C# 5 checks pass locally; release workflow repeats them before publishing.
+- User screenshot shows BIOS override active with 160 W default and 185 W active. Actual draw above 160 W under load remains unverified.
 
 ## 3. Key decisions (don't re-debate)
 - **Hardware access:** PawnIO (signed driver) with the official modules `LpcACPIEC.bin` and `IntelMSR.bin`, not WinRing0, which Defender blocks.
@@ -23,7 +24,7 @@
 - **Versioning:** the user requires a **version bump on every change**. File names follow `ClevoTune (vX.Y.Z).ext`.
 
 ## 4. Tried and failed (don't retry)
-- **Raising TGP above 160 W.** All of these fail; the vBIOS locks it:
+- **Raising TGP above 160 W without a BIOS override.** These earlier attempts did not raise the enforced limit:
   - NVML `SetPowerManagementLimit` → Not Supported
   - NVAPI ClientPowerPolicies → 0 policies, invalid argument
   - mVolt+ `--power` → "Power limit is unavailable"
@@ -48,7 +49,7 @@
 
 ## 6. Next steps
 1. Ask the user to confirm v1.6.3 GPU readings after a GPU reset: the log should show `NVML: … reconnecting` / `reconnected`.
-2. If the user uses the mVolt+ GUI **BIOS override** ("BIOS file" with an original dump of their own card, or "Direct") to raise TGP, add a "Re-check power limit" button that clears `cfg.powerMax`/`cfg.powerLocked`. Alternatively, detect a higher `default_mw` from `mVolt+ --status`.
+2. After applying/changing the external mVolt+ BIOS override, use **Re-check power limits**. It clears `cfg.powerMax`/`cfg.powerLocked`, queries NVML/mVolt+ and never applies tuning. Confirm both reported limits and measured draw under load.
 3. Ask which LICENSE to add (none yet).
 4. For every release:
    - bump `$AppVersion` in `src/app.ps1:3`
@@ -58,7 +59,10 @@
    - run `gh api -X POST repos/j0p3s/Clevo-tuner/actions/workflows/release.yml/dispatches -f ref=main -f 'inputs[version]=X.Y.Z'`
 
 ## 7. Open questions / gotchas
-- Nothing can be run on Windows here. Validate with:
+- Local Windows validation is available (no physical GPU verification performed):
+  - `powershell -NoProfile -STA -File tests/validate.ps1`
+  - `powershell -NoProfile -File tests/power-limits.ps1`
+  - The local machine has no .NET SDK; the release workflow builds the full executable. Previous validation methods:
   - `pwsh` `Parser.ParseFile`
   - a net48 C# 5 compile
   - a WPF markup build (needs the official .NET SDK with WindowsDesktop targets)

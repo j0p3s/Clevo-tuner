@@ -1,6 +1,11 @@
 # key (English, as used in the code/XAML) -> pt, fr, es, de, it
 # English uses the key itself.
 ROWS = [
+("Center", "Centro", "Centre", "Centro", "Mitte", "Centro"),
+('Re-check power limits', 'Rever limites de potência', 'Revérifier les limites de puissance', 'Volver a comprobar los límites de potencia', 'Leistungslimits erneut prüfen', 'Ricontrolla i limiti di potenza'),
+('Power request unverified', 'Pedido de potência não verificado', 'Demande de puissance non vérifiée', 'Solicitud de potencia sin verificar', 'Leistungsanforderung nicht verifiziert', 'Richiesta di potenza non verificata'),
+('Power limits rechecked; no tuning applied', 'Limites de potência revistos; sem aplicar ajustes', 'Limites de puissance revérifiées ; aucun réglage appliqué', 'Límites de potencia comprobados; sin aplicar ajustes', 'Leistungslimits erneut geprüft; keine Einstellungen angewendet', 'Limiti di potenza ricontrollati; nessuna regolazione applicata'),
+
 ("The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.", "A placa continua a aplicar {0} W: nesta GPU o limite de potência pode ser baixado, mas não subir acima de {1} W. O máximo do slider passa a ser {1} W.", "La carte applique toujours {0} W : sur ce GPU la limite de puissance peut être abaissée, mais pas relevée au-dessus de {1} W. Le maximum du curseur est maintenant {1} W.", "La tarjeta sigue aplicando {0} W: en esta GPU el límite de potencia puede bajarse, pero no subir por encima de {1} W. El máximo del control pasa a ser {1} W.", "Die Karte erzwingt weiterhin {0} W: Auf dieser GPU kann das Leistungslimit gesenkt, aber nicht über {1} W angehoben werden. Das Reglermaximum ist jetzt {1} W.", "La scheda applica ancora {0} W: su questa GPU il limite di potenza può essere abbassato, ma non alzato oltre {1} W. Il massimo del cursore ora è {1} W."),
 ("Check for mVolt+ updates", "Procurar atualizações do mVolt+", "Rechercher des mises à jour de mVolt+", "Buscar actualizaciones de mVolt+", "Nach mVolt+-Updates suchen", "Cerca aggiornamenti di mVolt+"),
 ("Checking mVolt+ updates…", "A procurar atualizações do mVolt+…", "Recherche de mises à jour de mVolt+…", "Buscando actualizaciones de mVolt+…", "Suche nach mVolt+-Updates…", "Ricerca aggiornamenti di mVolt+…"),

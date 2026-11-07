@@ -684,6 +684,18 @@ namespace ClevoTune
             get { return NvmlOk && !double.IsNaN(MinPowerW) && !double.IsNaN(MaxPowerW) && MaxPowerW - MinPowerW >= 1; }
         }
 
+        // Refresh metadata and readback without writing GPU settings or running fan control.
+        public void RefreshPowerLimits()
+        {
+            DefaultPowerW = MinPowerW = MaxPowerW = GpuPowerLimit = double.NaN;
+            if (!NvmlOk) return;
+            uint a, b;
+            if (Nvml.GetDefaultLimit(dev, out a) == 0 && a > 0 && a < 1000000) DefaultPowerW = a / 1000.0;
+            if (Nvml.GetLimitConstraints(dev, out a, out b) == 0 && a > 0 && b >= a && b < 1000000)
+            { MinPowerW = a / 1000.0; MaxPowerW = b / 1000.0; }
+            if (Nvml.GetEnforcedLimit(dev, out a) == 0 && a > 0 && a < 1000000) GpuPowerLimit = a / 1000.0;
+        }
+
         public int SetPowerLimitW(double w) { return NvmlOk ? Nvml.SetPowerLimit(dev, (uint)Math.Round(w * 1000)) : 999; }
         public int LockClocks(int minMhz, int maxMhz) { return NvmlOk ? Nvml.SetLockedClocks(dev, (uint)minMhz, (uint)maxMhz) : 999; }
         public int ResetClocks() { return NvmlOk ? Nvml.ResetLockedClocks(dev) : 999; }

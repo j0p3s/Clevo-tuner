@@ -5,9 +5,13 @@
 name=Português
 code=pt
 base=en
-version=1.6.3
+version=1.6.4
 
 [strings]
+Center=Centro
+Re-check power limits=Rever limites de potência
+Power request unverified=Pedido de potência não verificado
+Power limits rechecked; no tuning applied=Limites de potência revistos; sem aplicar ajustes
 The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.=A placa continua a aplicar {0} W: nesta GPU o limite de potência pode ser baixado, mas não subir acima de {1} W. O máximo do slider passa a ser {1} W.
 Check for mVolt+ updates=Procurar atualizações do mVolt+
 Checking mVolt+ updates…=A procurar atualizações do mVolt+…
