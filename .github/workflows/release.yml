@@ -5,8 +5,8 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to release (e.g. v1.6.2)'
+      version:
+        description: 'Version to release from main (e.g. 1.6.2); the tag v<version> is created'
         required: true
 
 permissions:
@@ -17,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - uses: actions/setup-python@v5
         with:
@@ -33,7 +31,7 @@ jobs:
 
       - name: Check version matches tag
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          if [ -n "${{ github.event.inputs.version }}" ]; then TAG="v${{ github.event.inputs.version }}"; else TAG="${{ github.ref_name }}"; fi
           VER="${TAG#v}"
           test -f "dist/ClevoTune (v$VER).exe" || { echo "version in src/app.ps1 does not match tag $TAG"; ls dist; exit 1; }
           echo "VER=$VER" >> "$GITHUB_ENV"
@@ -46,6 +44,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
           name: ClevoTune ${{ env.VER }}
           body_path: notes.md
           files: |

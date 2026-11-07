@@ -506,7 +506,7 @@ python build.py            # ClevoTune.cmd, Language/*.lng, dist/*.cmd, dist/*.e
 python build.py --no-exe   # only the script and the language files
 ```
 
-**Releases** are built by GitHub Actions (`.github/workflows/release.yml`): bump `$AppVersion` in `src/app.ps1`, add the version to `CHANGELOG.md`, commit, then push a tag such as `v1.6.3`. The workflow builds the files and publishes the release with that version's changelog section.
+**Releases** are built by GitHub Actions (`.github/workflows/release.yml`): bump `$AppVersion` in `src/app.ps1`, add the version to `CHANGELOG.md`, commit, then either push a tag such as `v1.6.3` or run the **Release** workflow from the Actions tab with the version number. The workflow builds the files and publishes the release with that version's changelog section.
 
 The C# core is embedded in the script and compiled by Windows PowerShell on the first run (C# 5 / .NET Framework 4.x), then cached in `%LOCALAPPDATA%\ClevoTune`.
 
