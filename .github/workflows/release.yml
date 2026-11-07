@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.6.2)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build
+        run: python build.py
+
+      - name: Check version matches tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="${TAG#v}"
+          test -f "dist/ClevoTune (v$VER).exe" || { echo "version in src/app.ps1 does not match tag $TAG"; ls dist; exit 1; }
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Release notes
+        run: python .github/release_notes.py "$VER" > notes.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ClevoTune ${{ env.VER }}
+          body_path: notes.md
+          files: |
+            dist/ClevoTune (v${{ env.VER }}).zip
+            dist/ClevoTune (v${{ env.VER }}).exe
+            dist/ClevoTune (v${{ env.VER }}).cmd
