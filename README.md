@@ -10,7 +10,7 @@ ClevoTune shows live CPU, GPU and memory sensors, applies GPU clock offsets, pow
 
 ![ClevoTune – Fans tab](docs/screenshot.png)
 
-**[⬇ Download the latest release](https://github.com/j0p3s/Clevo-tuner/releases/latest)**: get `ClevoTune (vX.Y.Z).zip`, extract it to a permanent folder and run `ClevoTune (vX.Y.Z).exe`.
+**[⬇ Download the latest release](https://github.com/j0p3s/Clevo-tuner/releases/latest)**: get `ClevoTune.vX.Y.Z.zip`, extract it to a permanent folder and run `ClevoTune (vX.Y.Z).exe`.
 
 > **Warning:** ClevoTune writes directly to the laptop's embedded controller (EC) and changes GPU clocks. That is the same kind of access vendor tools use, but it is still low-level hardware control. Use it at your own risk and watch your temperatures when you try new settings.
 
