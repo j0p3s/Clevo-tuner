@@ -1,6 +1,8 @@
 * text=auto
 # batch files must keep CRLF
 *.cmd text eol=crlf
+# the built script is stored byte-for-byte (CRLF) so a raw download from GitHub also works
+ClevoTune.cmd -text
 *.bat text eol=crlf
 *.lng text eol=crlf
 *.ps1 text eol=crlf
