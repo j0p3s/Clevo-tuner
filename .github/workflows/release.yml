@@ -27,6 +27,7 @@ jobs:
         run: |
           & ./tests/validate.ps1
           & ./tests/power-limits.ps1
+          & ./tests/runtime.ps1
 
   release:
     needs: validate

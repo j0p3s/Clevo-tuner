@@ -1,6 +1,16 @@
 # key (English, as used in the code/XAML) -> pt, fr, es, de, it
 # English uses the key itself.
 ROWS = [
+('Monitor', 'Monitor', 'Écran', 'Monitor', 'Monitor', 'Monitor'),
+('Primary display', 'Ecrã principal', 'Écran principal', 'Pantalla principal', 'Hauptbildschirm', 'Schermo principale'),
+('Display {0}', 'Ecrã {0}', 'Écran {0}', 'Pantalla {0}', 'Bildschirm {0}', 'Schermo {0}'),
+('Top center', 'Topo ao centro', 'En haut au centre', 'Arriba al centro', 'Oben mittig', 'In alto al centro'),
+('Bottom center', 'Fundo ao centro', 'En bas au centre', 'Abajo al centro', 'Unten mittig', 'In basso al centro'),
+('Applied value unknown; apply to confirm', 'Valor aplicado desconhecido; aplica para confirmar', 'Valeur appliquée inconnue ; appliquer pour confirmer', 'Valor aplicado desconocido; aplica para confirmar', 'Angewendeter Wert unbekannt; zum Bestätigen anwenden', 'Valore applicato sconosciuto; applica per confermare'),
+('GPU reset: previous voltage and clock-lock values are unverified', 'GPU reiniciada: valores anteriores de tensão e bloqueio de frequência não verificados', 'GPU réinitialisé : anciennes valeurs de tension et de verrouillage non vérifiées', 'GPU reiniciada: valores anteriores de voltaje y bloqueo de frecuencia sin verificar', 'GPU zurückgesetzt: vorherige Spannungs- und Taktsperrwerte nicht verifiziert', 'GPU reimpostata: valori precedenti di tensione e blocco frequenza non verificati'),
+('Power requested {0} W; enforced {1} W', 'Potência pedida {0} W; aplicada {1} W', 'Puissance demandée {0} W ; imposée {1} W', 'Potencia solicitada {0} W; aplicada {1} W', 'Leistung angefordert {0} W; erzwungen {1} W', 'Potenza richiesta {0} W; imposta {1} W'),
+('Temperature unavailable: EC auto', 'Temperatura indisponível: EC auto', 'Température indisponible : EC auto', 'Temperatura no disponible: EC auto', 'Temperatur nicht verfügbar: EC automatisch', 'Temperatura non disponibile: EC automatico'),
+
 ("Center", "Centro", "Centre", "Centro", "Mitte", "Centro"),
 ('Re-check power limits', 'Rever limites de potência', 'Revérifier les limites de puissance', 'Volver a comprobar los límites de potencia', 'Leistungslimits erneut prüfen', 'Ricontrolla i limiti di potenza'),
 ('Power request unverified', 'Pedido de potência não verificado', 'Demande de puissance non vérifiée', 'Solicitud de potencia sin verificar', 'Leistungsanforderung nicht verifiziert', 'Richiesta di potenza non verificata'),

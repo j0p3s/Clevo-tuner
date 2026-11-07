@@ -4,15 +4,19 @@
 - A single-file Windows tool (`.exe` + equivalent `.cmd`) for the owner's Clevo P775DM3-G (i7-8700K + RTX 3080 Laptop, DEV_24DC, vBIOS 94.04.46.00.15, driver 621.12): live sensors, GPU tuning and custom EC fan curves. It replaces Clevo Control Center and MSI Afterburner on this laptop.
 
 ## 2. Current status
-- **v1.6.4 released** (`main` + release v1.6.4, assets `ClevoTune.v1.6.4.{zip,exe,cmd}`). Built and tested on the user's hardware and working:
+- **v1.6.5 released** (`main` + release v1.6.5, assets `ClevoTune.v1.6.5.{zip,exe,cmd}`). Earlier versions were tested on the user's hardware with these features working; v1.6.5 has automated Windows validation but still needs hardware confirmation:
   - sensors
   - fan curves (temperature/load, ClevoFanControl import/export)
   - core/memory offsets and clock lock
   - mVolt+ core voltage offset (`--core-vdemand` exit 0)
   - automatic PawnIO and mVolt+ install, tray, start with Windows, 6 languages
 - v1.6.3 (NVML reconnect after a GPU reset) has not yet been confirmed on the user's PC.
-- v1.6.4 adds read-only power-limit recheck after an external BIOS override, honest unverified mVolt+ readback, fresh readback on refresh, and Center overlay position. Windows regression/markup/C# 5 checks pass locally; release workflow repeats them before publishing.
+- v1.6.4 added read-only power-limit recheck after an external BIOS override, honest unverified mVolt+ readback, fresh readback on refresh, and Center overlay position. Windows regression/markup/C# 5 checks pass locally; release workflow repeats them before publishing.
 - User screenshot shows BIOS override active with 160 W default and 185 W active. Actual draw above 160 W under load remains unverified.
+
+- v1.6.5 keeps dispatcher polling alive during mVolt+/network waits and serializes tuning/update operations. Manual fans fall back to EC without their thermal feedback; overheat protection wins. Reset/startup invalidates applied voltage/lock indicators. Fresh power readback warns on either direction of mismatch (>1 W).
+- Overlay positions now include Center, Top center and Bottom center, with a saved monitor DeviceName and primary fallback on disconnect. Screen pixels are converted to WPF coordinates.
+- `tests/runtime.ps1` covers real harmless subprocess/loopback HTTP delays/timeouts, UI-operation guards, thermal policy and monitor persistence. Run after `tests/validate.ps1`; no real GPU/EC writes are performed.
 
 ## 3. Key decisions (don't re-debate)
 - **Hardware access:** PawnIO (signed driver) with the official modules `LpcACPIEC.bin` and `IntelMSR.bin`, not WinRing0, which Defender blocks.

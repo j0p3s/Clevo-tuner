@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $AppName    = 'ClevoTune'
-$AppVersion = '1.6.4'
+$AppVersion = '1.6.5'
 
 $Self = $env:CT_SELF
 if (-not $Self) { $Self = $PSCommandPath }
@@ -300,7 +300,7 @@ function New-DefaultConfig {
         lang        = 'auto'
         loadSmooth  = 3
         lastLock    = 0
-        overlay     = [pscustomobject]@{ enabled = $false; pos = 1; font = 14; opacity = 55; cpu = $true; gpu = $true; clk = $true; fan = $true; mem = $false }
+        overlay     = [pscustomobject]@{ enabled = $false; pos = 1; monitor = ''; font = 14; opacity = 55; cpu = $true; gpu = $true; clk = $true; fan = $true; mem = $false }
     }
 }
 
@@ -387,9 +387,46 @@ function Get-ModTargetDir {
     }
 }
 
-function Invoke-Download([string]$url, [string]$out) {
+function Wait-UiTask($task) {
+    while (-not $task.IsCompleted) {
+        if ($script:Exiting) { throw [OperationCanceledException]::new('Application is exiting') }
+        Pump-Ui
+        Start-Sleep -Milliseconds 15
+    }
+    if ($script:Exiting) { throw [OperationCanceledException]::new('Application is exiting') }
+    return $task.GetAwaiter().GetResult()
+}
+function Get-ResponsiveWeb([string]$url, [string]$out = '', [int]$timeout = 60000) {
+    Add-Type -AssemblyName System.Net.Http
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -Headers @{ 'User-Agent' = 'ClevoTune' } -TimeoutSec 60
+    $client = New-Object Net.Http.HttpClient
+    $client.Timeout = [TimeSpan]::FromMilliseconds($timeout)
+    $client.DefaultRequestHeaders.UserAgent.ParseAdd('ClevoTune')
+    $response = $null
+    try {
+        $response = Wait-UiTask ($client.GetAsync($url))
+        [void]$response.EnsureSuccessStatusCode()
+        if ($out) {
+            $bytes = Wait-UiTask ($response.Content.ReadAsByteArrayAsync())
+            [IO.File]::WriteAllBytes($out, [byte[]]$bytes)
+        } else {
+            $content = Wait-UiTask ($response.Content.ReadAsStringAsync())
+            return @{ Content = $content; Url = $response.RequestMessage.RequestUri.AbsoluteUri }
+        }
+    } finally { if ($response) { $response.Dispose() }; $client.Dispose() }
+}
+function Invoke-Download([string]$url, [string]$out) { Get-ResponsiveWeb $url $out }
+
+# Serialize tuning/update operations while dispatcher events continue.
+function Invoke-UiOperation([scriptblock]$action) {
+    if ($script:OperationBusy -or $script:Exiting) { return }
+    $script:OperationBusy = $true
+    if ($ui -and $ui.Tabs) { $ui.Tabs.IsEnabled = $false }
+    try { & $action }
+    finally {
+        $script:OperationBusy = $false
+        if (-not $script:Exiting -and $ui -and $ui.Tabs) { $ui.Tabs.IsEnabled = $true }
+    }
 }
 
 function Install-PawnIO {
@@ -585,13 +622,13 @@ function Get-MVoltRelease {
     $hdr = @{ 'User-Agent' = 'ClevoTune' }
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     try {
-        $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/b00nz/mVolt/releases/latest' -Headers $hdr -UseBasicParsing -TimeoutSec 20
+        $rel = (Get-ResponsiveWeb 'https://api.github.com/repos/b00nz/mVolt/releases/latest' '' 20000).Content | ConvertFrom-Json
         $as = @($rel.assets | Where-Object { $_.name -match '(?i)\.exe$' }) + @($rel.assets | Where-Object { $_.name -match '(?i)\.zip$' })
         if ($as.Count -gt 0) { return @{ Tag = [string]$rel.tag_name; Url = [string]$as[0].browser_download_url } }
     } catch { }
-    $r = Invoke-WebRequest -Uri 'https://github.com/b00nz/mVolt/releases/latest' -Headers $hdr -UseBasicParsing -TimeoutSec 20
-    $tag = ($r.BaseResponse.ResponseUri.AbsoluteUri -split '/')[-1]
-    $page = Invoke-WebRequest -Uri "https://github.com/b00nz/mVolt/releases/expanded_assets/$tag" -Headers $hdr -UseBasicParsing -TimeoutSec 20
+    $r = Get-ResponsiveWeb 'https://github.com/b00nz/mVolt/releases/latest' '' 20000
+    $tag = ($r.Url -split '/')[-1]
+    $page = Get-ResponsiveWeb "https://github.com/b00nz/mVolt/releases/expanded_assets/$tag" '' 20000
     $m = [regex]::Match($page.Content, 'href="(/b00nz/mVolt/releases/download/[^"]+?\.(?:exe|zip))"')
     if (-not $m.Success) { throw 'no .exe or .zip in the latest mVolt+ release' }
     return @{ Tag = $tag; Url = ('https://github.com' + $m.Groups[1].Value) }
@@ -663,21 +700,34 @@ function Update-MVolt([bool]$force) {
     } finally { Close-Splash }
 }
 function Invoke-MVolt([string[]]$a, [int]$timeout = 30000) {
+    if ($script:Exiting) { throw [OperationCanceledException]::new('Application is exiting') }
     $psi = New-Object System.Diagnostics.ProcessStartInfo($script:MVolt)
     $psi.Arguments = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
     $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
     $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
     $psi.WorkingDirectory = Split-Path -Parent $script:MVolt
     $proc = [System.Diagnostics.Process]::Start($psi)
-    $o = $proc.StandardOutput.ReadToEndAsync(); $e = $proc.StandardError.ReadToEndAsync()
-    if (-not $proc.WaitForExit($timeout)) {
-        try { $proc.Kill() } catch { }
-        return @{ Code = -1; Out = (T 'mVolt+ did not respond in time'); Raw = '' }
+    try {
+        $o = $proc.StandardOutput.ReadToEndAsync(); $e = $proc.StandardError.ReadToEndAsync()
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        while (-not $proc.HasExited -or -not $o.IsCompleted -or -not $e.IsCompleted) {
+            if ($script:Exiting) { throw [OperationCanceledException]::new('Application is exiting') }
+            if ($watch.ElapsedMilliseconds -ge $timeout) {
+                try { $proc.Kill() } catch { }
+                return @{ Code = -1; Out = (T 'mVolt+ did not respond in time'); Raw = '' }
+            }
+            Pump-Ui
+            Start-Sleep -Milliseconds 15
+        }
+        if ($script:Exiting) { throw [OperationCanceledException]::new('Application is exiting') }
+        $raw = $o.GetAwaiter().GetResult()
+        $txt = (($raw + ' ' + $e.GetAwaiter().GetResult()) -replace '\s+', ' ').Trim()
+        if ($txt.Length -gt 300) { $txt = $txt.Substring(0, 300) + '…' }
+        return @{ Code = $proc.ExitCode; Out = $txt; Raw = $raw }
+    } finally {
+        try { if (-not $proc.HasExited) { $proc.Kill() } } catch { }
+        $proc.Dispose()
     }
-    $raw = $o.Result
-    $txt = (($raw + ' ' + $e.Result) -replace '\s+', ' ').Trim()
-    if ($txt.Length -gt 300) { $txt = $txt.Substring(0, 300) + '…' }
-    return @{ Code = $proc.ExitCode; Out = $txt; Raw = $raw }
 }
 function Get-MVoltStatus {
     try {
@@ -686,7 +736,7 @@ function Get-MVoltStatus {
         $i = $r.Raw.IndexOf('{')
         if ($i -lt 0) { return $null }
         return ($r.Raw.Substring($i) | ConvertFrom-Json)
-    } catch { return $null }
+    } catch { if ($script:Exiting) { throw }; return $null }
 }
 # Only a finite, positive readback is evidence that a power request was enforced.
 function Get-MVoltEnforcedPower($status) {
@@ -701,6 +751,8 @@ function Get-MVoltEnforcedPower($status) {
 if ($IsAdmin) { Update-MVolt $false }
 $script:MVolt = Find-MVolt
 $script:AppliedVolt = [int]$script:Cfg.lastVolt
+$script:AppliedVoltKnown = $false
+$script:AppliedLockKnown = $false
 $script:MVoltPowerW = [double]::NaN
 $script:PowerUnverified = $false
 
@@ -1023,7 +1075,8 @@ function Update-TuneTexts {
 
 function Update-Readback {
     $hw = $script:Hw
-    if ($script:MVolt) { $ui.CardVolt.Text = ((T 'applied: {0} mV') -f (Signed $script:AppliedVolt)) } else { $ui.CardVolt.Text = (T 'requires mVolt+') }
+    if ($script:MVolt -and -not $script:AppliedVoltKnown) { $ui.CardVolt.Text = (T 'Applied value unknown; apply to confirm') }
+    elseif ($script:MVolt) { $ui.CardVolt.Text = ((T 'applied: {0} mV') -f (Signed $script:AppliedVolt)) } else { $ui.CardVolt.Text = (T 'requires mVolt+') }
     if ($script:PowerCapable) {
         $ui.CardPower.Text = ((T 'on card: {0} W') -f (Fmt $hw.GpuPowerLimit '0'))
         if (-not [double]::IsNaN($script:MVoltPowerW)) { $ui.CardPower.Text = ((T 'on card: {0} W') -f (Fmt $script:MVoltPowerW '0')) + ' (mVolt+)' }
@@ -1040,11 +1093,14 @@ function Update-Readback {
         $t = (T 'on card: {0}') -f [ClevoTune.NvApi]::StatusText($oi.Status)
         $ui.CardCore.Text = $t; $ui.CardMem.Text = $t
     }
-    if ($script:AppliedLock -gt 0) { $ui.CardLock.Text = ((T 'applied: {0} MHz') -f $script:AppliedLock) } else { $ui.CardLock.Text = (T 'applied: off') }
+    if (-not $script:AppliedLockKnown) { $ui.CardLock.Text = (T 'Applied value unknown; apply to confirm') }
+    elseif ($script:AppliedLock -gt 0) { $ui.CardLock.Text = ((T 'applied: {0} MHz') -f $script:AppliedLock) } else { $ui.CardLock.Text = (T 'applied: off') }
 }
 
-function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$label, [int]$volt = 0) {
+function Apply-TuningCore([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$label, [int]$volt = 0) {
     $hw = $script:Hw
+    $generation = $hw.NvmlReinits
+    if ($power -gt 0) { Read-PowerState }
     $ok = $true; $done = @()
     $mvPower = 0
     # a profile above the measured ceiling of this card is reduced to it (avoids retrying every start)
@@ -1074,7 +1130,14 @@ function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$l
         }
         if ($pdone) {
             Log ((T 'Power {0} W: {1}') -f $power, $how)
-            $done += "$power W"; $script:MVoltPowerW = [double]::NaN; $script:PowerUnverified = $false
+            $hw.RefreshPowerLimits()
+            $script:MVoltPowerW = [double]::NaN
+            $script:PowerUnverified = [double]::IsNaN($hw.GpuPowerLimit)
+            if ($script:PowerUnverified) { Log (T 'Power request unverified'); $ok = $false }
+            else {
+                Log ((T 'Power requested {0} W; enforced {1} W') -f $power, (Fmt $hw.GpuPowerLimit '0.###'))
+                if ([Math]::Abs($hw.GpuPowerLimit - $power) -gt 1) { $ok = $false } else { $done += "$power W" }
+            }
         } elseif ($script:MVolt -and -not [double]::IsNaN($hw.DefaultPowerW)) {
             if ($how) { Log ((T 'Power {0} W: {1}') -f $power, ($how + ' → mVolt+')) }
             $mvPower = $power
@@ -1102,13 +1165,14 @@ function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$l
         } elseif ($mem -ne 0) { Log (T 'Memory offset: locked by the driver on this GPU') }
     } else { Log ((T 'NVAPI unavailable: {0}') -f [ClevoTune.NvApi]::LastError); $ok = $false }
     if ($hw.NvmlOk) {
+        $script:AppliedLockKnown = $false
         if ($lock -gt 0) {
             $st = $hw.LockClocks(210, $lock)
             Log ((T 'Clock limit {0} MHz: {1}') -f $lock, $hw.NvmlText($st))
-            if ($st -eq 0) { $script:AppliedLock = $lock; $done += ((T 'limit {0}') -f $lock) } else { $ok = $false }
+            if ($st -eq 0) { $script:AppliedLock = $lock; $script:AppliedLockKnown = $true; $done += ((T 'limit {0}') -f $lock) } else { $ok = $false }
         } else {
             $st = $hw.ResetClocks()
-            if ($st -eq 0) { $script:AppliedLock = 0 }
+            if ($st -eq 0) { $script:AppliedLock = 0; $script:AppliedLockKnown = $true }
             elseif ($script:AppliedLock -gt 0) { Log ((T 'Remove clock limit: {0}') -f $hw.NvmlText($st)); $ok = $false }
         }
         $script:Cfg.lastLock = $script:AppliedLock; $script:Dirty = $true
@@ -1135,13 +1199,15 @@ function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$l
             if ($script:PowerUnverified) {
                 Log (T 'Power request unverified')
                 $ok = $false
-            } else { Log ((T 'mVolt+: {0}') -f ('power enforced ' + (Fmt $script:MVoltPowerW '0') + ' W')) }
+            } else { Log ((T 'Power requested {0} W; enforced {1} W') -f $mvPower, (Fmt $script:MVoltPowerW '0.###')) }
             if (-not $script:PowerUnverified -and $script:MVoltPowerW -lt $mvPower - 1) {
                 # accepted, but the card won't go that high: remember the real ceiling for this driver
                 $ceil = [int][Math]::Round([Math]::Max($script:MVoltPowerW, $def))
                 $script:Cfg.powerMax = [string]$hw.Driver + '|' + $ceil; $script:Dirty = $true
                 $ui.SlPower.Maximum = $ceil; $ui.LblPowerMax.Text = ('{0:0} W' -f $ceil)
                 Log ((T 'The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.') -f (Fmt $script:MVoltPowerW '0'), $ceil)
+                $ok = $false
+            } elseif (-not $script:PowerUnverified -and [Math]::Abs($script:MVoltPowerW - $mvPower) -gt 1) {
                 $ok = $false
             } elseif (-not $script:PowerUnverified) { $done += "$mvPower W" }
         } else {
@@ -1153,21 +1219,32 @@ function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$l
             Log (T 'The power limit is locked on this GPU: NVML, NVAPI and mVolt+ all refused it, so the slider was disabled.')
         }
     }
-    if ($script:MVolt -and ($volt -ne $script:AppliedVolt)) {
+    if ($script:MVolt -and (-not $script:AppliedVoltKnown -or $volt -ne $script:AppliedVolt)) {
+        $script:AppliedVoltKnown = $false
         $vArg = Inv '{0}' $volt
         $r = Invoke-MVolt @('--core-vdemand', $vArg)
         Log ((T 'mVolt+: {0}') -f ("[--core-vdemand $vArg] exit " + $r.Code + $(if ($r.Out) { ' — ' + $r.Out } else { '' })))
         if ($r.Code -eq 0) {
-            $script:AppliedVolt = $volt; $script:Cfg.lastVolt = $volt; $script:Dirty = $true
+            $script:AppliedVolt = $volt; $script:AppliedVoltKnown = $true; $script:Cfg.lastVolt = $volt; $script:Dirty = $true
             $done += ((T 'voltage {0} mV') -f (Signed $volt))
         } else { $ok = $false }
     }
+    if ($hw.NvmlReinits -ne $generation) { Invalidate-TuningReadback; $done = @(); $ok = $false }
     $when = (Get-Date).ToString('HH:mm:ss')
     $txt = "$label " + ($done -join ' / ') + "  ($when)"
     if ($ok) { Set-Status $txt $Green; $ui.TxtLive.Text = (T 'Applied to card') } else { Set-Status ((T '{0} — see log') -f $txt) $Yellow; $ui.TxtLive.Text = (T 'Applied with warnings') }
     Update-Readback
 }
 
+function Apply-Tuning([int]$power, [int]$core, [int]$mem, [int]$lock, [string]$label, [int]$volt = 0) {
+    Invoke-UiOperation { Apply-TuningCore $power $core $mem $lock $label $volt }
+}
+function Invalidate-TuningReadback {
+    $script:AppliedVoltKnown = $false; $script:AppliedLockKnown = $false
+    $script:MVoltPowerW = [double]::NaN
+    $script:PowerUnverified = [double]::IsNaN($script:Hw.GpuPowerLimit)
+    Log (T 'GPU reset: previous voltage and clock-lock values are unverified')
+}
 $ui.SlPower.Add_ValueChanged({ Update-TuneTexts })
 $ui.SlCore.Add_ValueChanged({ Update-TuneTexts })
 $ui.SlMem.Add_ValueChanged({ Update-TuneTexts })
@@ -1214,8 +1291,8 @@ function Recheck-PowerLimits {
     Log $message
     Set-Status $message $(if ($script:PowerUnverified) { $Yellow } else { $Green })
 }
-$ui.BtnRecheckPower.Add_Click({ Recheck-PowerLimits })
-$ui.BtnRefresh.Add_Click({ Read-PowerState; Update-Readback; Set-Status (T 'Values re-read from the card') $Green })
+$ui.BtnRecheckPower.Add_Click({ Invoke-UiOperation { Recheck-PowerLimits } })
+$ui.BtnRefresh.Add_Click({ Invoke-UiOperation { Read-PowerState; Update-Readback; Set-Status (T 'Values re-read from the card') $(if ($script:PowerUnverified) { $Yellow } else { $Green }) } })
 
 # ---------------------------------------------------------------- profiles
 function Profile-Text($p) {
@@ -1800,13 +1877,47 @@ $ovlText.Effect = $fx
 $ovlBorder.Child = $ovlText
 $ovl.Content = $ovlBorder
 $ovl.Add_SourceInitialized({ [ClevoTune.Win]::ClickThrough((New-Object System.Windows.Interop.WindowInteropHelper($ovl)).Handle) })
+function Get-OverlayWorkArea {
+    $screens = @([Windows.Forms.Screen]::AllScreens)
+    $screen = @($screens | Where-Object { $_.DeviceName -eq [string]$script:Cfg.overlay.monitor } | Select-Object -First 1)
+    if ($screen.Count) { $screen = $screen[0] } else { $screen = [Windows.Forms.Screen]::PrimaryScreen }
+    $bounds = $screen.WorkingArea
+    # Screen bounds are device pixels; WPF window coordinates are logical units.
+    $source = [Windows.PresentationSource]::FromVisual($ovl)
+    $matrix = [Windows.Media.Matrix]::Identity
+    if ($source -and $source.CompositionTarget) { $matrix = $source.CompositionTarget.TransformFromDevice }
+    $origin = $matrix.Transform((New-Object Windows.Point $bounds.Left, $bounds.Top))
+    $size = $matrix.Transform((New-Object Windows.Vector $bounds.Width, $bounds.Height))
+    return [pscustomobject]@{ Left=$origin.X; Top=$origin.Y; Width=$size.X; Height=$size.Y; Right=$origin.X+$size.X; Bottom=$origin.Y+$size.Y }
+}
+function Refresh-OverlayMonitors {
+    $wasLoading = $script:Loading; $script:Loading = $true
+    try {
+        $ui.CmbOvlMonitor.Items.Clear()
+        $default = New-Object Windows.Controls.ComboBoxItem
+        $default.Content = (T 'Primary display'); $default.Tag = ''
+        [void]$ui.CmbOvlMonitor.Items.Add($default)
+        $selected = 0; $i = 0
+        foreach ($screen in [Windows.Forms.Screen]::AllScreens) {
+            $i++
+            $item = New-Object Windows.Controls.ComboBoxItem
+            $item.Tag = $screen.DeviceName
+            $item.Content = ((T 'Display {0}') -f $i) + ' (' + $screen.Bounds.Width + ' × ' + $screen.Bounds.Height + ')'
+            [void]$ui.CmbOvlMonitor.Items.Add($item)
+            if ($screen.DeviceName -eq [string]$script:Cfg.overlay.monitor) { $selected = $i }
+        }
+        $ui.CmbOvlMonitor.SelectedIndex = $selected
+    } finally { $script:Loading = $wasLoading }
+}
 function Position-Overlay {
-    $wa = [System.Windows.SystemParameters]::WorkArea
+    $wa = Get-OverlayWorkArea
     $m = 12
     $pos = [int]$script:Cfg.overlay.pos
-    if ($pos -eq 4) {
+    if ($pos -ge 4 -and $pos -le 6) {
         $ovl.Left = $wa.Left + ($wa.Width - $ovl.ActualWidth) / 2
-        $ovl.Top = $wa.Top + ($wa.Height - $ovl.ActualHeight) / 2
+        if ($pos -eq 5) { $ovl.Top = $wa.Top + $m }
+        elseif ($pos -eq 6) { $ovl.Top = $wa.Bottom - $ovl.ActualHeight - $m }
+        else { $ovl.Top = $wa.Top + ($wa.Height - $ovl.ActualHeight) / 2 }
         return
     }
     if ($pos -eq 0 -or $pos -eq 2) { $ovl.Left = $wa.Left + $m } else { $ovl.Left = $wa.Right - $ovl.ActualWidth - $m }
@@ -1835,6 +1946,7 @@ function Update-Overlay {
     }
     if ($o.mem) { $l += ('MEM  RAM {0}/{1}  VRAM {2}/{3} GB' -f (Fmt $hw.RamUsed '0.0'), (Fmt $hw.RamTotal '0'), (Fmt $hw.VramUsed '0.0'), (Fmt $hw.VramTotal '0')) }
     $ovlText.Text = ($l -join "`n")
+    Position-Overlay
     $script:OvlTick++
     if ($script:OvlTick % 5 -eq 0) { $ovl.Topmost = $false; $ovl.Topmost = $true }
 }
@@ -1843,6 +1955,8 @@ function Save-OverlayUi {
     $o = $script:Cfg.overlay
     $o.enabled = [bool]$ui.ChkOverlay.IsChecked
     $o.pos = [Math]::Max(0, $ui.CmbOvlPos.SelectedIndex)
+    # Only an explicit monitor selection replaces a missing/disconnected saved display.
+    if ($script:MonitorSelectionChanged -and $ui.CmbOvlMonitor.SelectedItem) { $o.monitor = [string]$ui.CmbOvlMonitor.SelectedItem.Tag }
     $o.font = [int]$ui.SlOvlFont.Value; $o.opacity = [int]$ui.SlOvlOp.Value
     $o.cpu = [bool]$ui.OvlCpu.IsChecked; $o.gpu = [bool]$ui.OvlGpu.IsChecked; $o.clk = [bool]$ui.OvlClk.IsChecked
     $o.fan = [bool]$ui.OvlFan.IsChecked; $o.mem = [bool]$ui.OvlMem.IsChecked
@@ -1852,6 +1966,11 @@ function Save-OverlayUi {
 }
 foreach ($n in 'ChkOverlay', 'OvlCpu', 'OvlGpu', 'OvlClk', 'OvlFan', 'OvlMem') { $ui[$n].Add_Click({ Save-OverlayUi }) }
 $ui.CmbOvlPos.Add_SelectionChanged({ Save-OverlayUi })
+$ui.CmbOvlMonitor.Add_DropDownOpened({ Refresh-OverlayMonitors })
+$ui.CmbOvlMonitor.Add_SelectionChanged({
+    $script:MonitorSelectionChanged = $true
+    try { Save-OverlayUi } finally { $script:MonitorSelectionChanged = $false }
+})
 $ui.SlOvlFont.Add_ValueChanged({ $ui.ValOvlFont.Text = ('{0:0}' -f $ui.SlOvlFont.Value); Save-OverlayUi })
 $ui.SlOvlOp.Add_ValueChanged({ $ui.ValOvlOp.Text = ('{0:0} %' -f $ui.SlOvlOp.Value); Save-OverlayUi })
 
@@ -1871,6 +1990,7 @@ function Reinit-Hw {
         try { $script:Hw.Dispose() } catch { }
         $script:Hw = New-HwInstance
         $script:Hw.Tick(1.0)
+        Invalidate-TuningReadback
         Update-Header
         Init-Tuning
         Build-FanList
@@ -1888,20 +2008,21 @@ function Update-MVoltUi {
     else { $ui.TxtMVolt.Text = (T 'mVolt+ not found. It is used for power limits and voltage offsets that the NVIDIA driver blocks on this GPU.'); $ui.TxtMVolt.Foreground = $Yellow }
 }
 $ui.BtnMVoltSite.Add_Click({ Start-Process 'https://github.com/b00nz/mVolt' })
-$ui.BtnMVoltUpdate.Add_Click({
+$ui.BtnMVoltUpdate.Add_Click({ Invoke-UiOperation {
     $win.Cursor = [System.Windows.Input.Cursors]::Wait
     try {
         Set-Status (T 'Checking mVolt+ updates…') $Yellow
         Pump-Ui
         Update-MVolt $true
+        if ($script:Exiting) { return }
         $script:MVolt = Find-MVolt
         Save-Config
         Update-MVoltUi
         Init-Tuning
         Set-Status $ui.TxtMVolt.Text $Green
     } finally { $win.Cursor = $null }
-})
-$ui.BtnModules.Add_Click({
+} })
+$ui.BtnModules.Add_Click({ Invoke-UiOperation {
     $win.Cursor = [System.Windows.Input.Cursors]::Wait
     try {
         Set-Status (T 'Reinstalling PawnIO driver and modules…') $Yellow
@@ -1909,13 +2030,14 @@ $ui.BtnModules.Add_Click({
         $script:Timer.Stop()
         try { $script:Hw.ReleaseAll(); $script:Hw.Dispose() } catch { }
         Ensure-Dependencies $true
+        if ($script:Exiting) { return }
         Reinit-Hw
         if ($script:RebootNeeded) { Set-Status (T 'Installed — restart Windows to activate the driver') $Yellow }
     } catch {
         Log ((T 'Reinstall failed: {0}') -f $_.Exception.Message)
         Set-Status (T 'Reinstall failed — see log') $Red
-    } finally { $win.Cursor = $null; $script:Timer.Start() }
-})
+    } finally { $win.Cursor = $null; if (-not $script:Exiting) { $script:Timer.Start() } }
+} })
 $ui.ChkCloseTray.Add_Click({ $script:Cfg.closeToTray = [bool]$ui.ChkCloseTray.IsChecked; $script:Dirty = $true })
 $ui.CmbInterval.Add_SelectionChanged({
     if ($script:Loading) { return }
@@ -1925,6 +2047,7 @@ $ui.CmbInterval.Add_SelectionChanged({
 
 function Refresh-Language {
     Apply-LangTargets
+    Refresh-OverlayMonitors
     # closed ComboBoxes cache the selected text: reselect so it shows the new language
     $script:Loading = $true
     foreach ($n in 'CmbFanMode', 'CmbFanSource', 'CmbPreset', 'CmbOvlPos', 'CmbInterval') {
@@ -1985,7 +2108,7 @@ function Build-TrayMenu {
         $it.Tag = [string]$p.name
         $it.Add_Click({ param($sender, $e)
             $pp = Get-Profile ([string]$sender.Tag)
-            if ($pp) { Load-ProfileToSliders $pp; Apply-Tuning ([int]$pp.power) ([int]$pp.core) ([int]$pp.mem) ([int]$pp.lock) ((T "Profile '{0}':") -f $pp.name) ([int]$pp.volt) }
+            if ($pp -and -not $script:OperationBusy) { Load-ProfileToSliders $pp; Apply-Tuning ([int]$pp.power) ([int]$pp.core) ([int]$pp.mem) ([int]$pp.lock) ((T "Profile '{0}':") -f $pp.name) ([int]$pp.volt) }
         })
     }
     [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
@@ -2036,7 +2159,7 @@ function Exit-App {
     $app.Shutdown()
 }
 
-$app.Add_SessionEnding({ try { $script:Hw.ReleaseAll() } catch { }; Save-Config })
+$app.Add_SessionEnding({ $script:Exiting = $true; $script:Timer.Stop(); try { $script:Hw.ReleaseAll() } catch { }; Save-Config })
 $app.Add_DispatcherUnhandledException({ param($sender, $e) Log ((T 'Unexpected error: {0}') -f $e.Exception.Message); $e.Handled = $true })
 
 # ---------------------------------------------------------------- timer loop
@@ -2050,7 +2173,7 @@ $script:Timer.Add_Tick({
         if ($dt -gt 10) { $dt = 1 }
         $script:Hw.Tick($dt)
         foreach ($m in $script:Hw.TakeMessages()) { Log $m }
-        if ($script:Hw.NvmlReinits -ne $script:SeenReinits) { $script:SeenReinits = $script:Hw.NvmlReinits; if ($script:Hw.NvmlOk) { $script:MVoltPowerW = [double]::NaN; Update-Header; Init-Tuning } }
+        if ($script:Hw.NvmlReinits -ne $script:SeenReinits) { $script:SeenReinits = $script:Hw.NvmlReinits; Invalidate-TuningReadback; if ($script:Hw.NvmlOk) { Update-Header; Init-Tuning } }
         Update-Cards
         if ($win.IsVisible) {
             Update-FanUi
@@ -2092,6 +2215,7 @@ $ui.ChkCloseTray.IsChecked = [bool]$script:Cfg.closeToTray
 $ui.CmbInterval.SelectedIndex = [Math]::Max(0, [array]::IndexOf([int[]]@(500, 1000, 2000), [int]$script:Cfg.interval))
 $o = $script:Cfg.overlay
 $ui.ChkOverlay.IsChecked = [bool]$o.enabled; $ui.CmbOvlPos.SelectedIndex = [int]$o.pos
+Refresh-OverlayMonitors
 $ui.SlOvlFont.Value = [double]$o.font; $ui.ValOvlFont.Text = ('{0:0}' -f $ui.SlOvlFont.Value)
 $ui.SlOvlOp.Value = [double]$o.opacity; $ui.ValOvlOp.Text = ('{0:0} %' -f $ui.SlOvlOp.Value)
 $ui.OvlCpu.IsChecked = [bool]$o.cpu; $ui.OvlGpu.IsChecked = [bool]$o.gpu; $ui.OvlClk.IsChecked = [bool]$o.clk; $ui.OvlFan.IsChecked = [bool]$o.fan; $ui.OvlMem.IsChecked = [bool]$o.mem

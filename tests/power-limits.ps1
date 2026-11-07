@@ -4,21 +4,21 @@ $root = Split-Path $PSScriptRoot
 $tokens = $null; $errors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText((Join-Path $root 'src/app.ps1')), [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw (($errors | ForEach-Object { $_.Message }) -join '; ') }
-foreach ($name in 'Get-MVoltEnforcedPower', 'Apply-Tuning', 'Read-PowerState', 'Recheck-PowerLimits', 'Init-Tuning', 'Position-Overlay') {
+foreach ($name in 'Signed', 'Get-MVoltEnforcedPower', 'Apply-Tuning', 'Apply-TuningCore', 'Invoke-UiOperation', 'Invalidate-TuningReadback', 'Read-PowerState', 'Recheck-PowerLimits', 'Init-Tuning', 'Position-Overlay') {
     $node = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }.GetNewClosure(), $true)
     . ([scriptblock]::Create($node.Extent.Text))
 }
 function Assert($condition, $message) { if (-not $condition) { throw $message } }
 function T($s) { $s }
 function Log($s) { $script:Logs += $s }
-function Set-Status($s, $color) { }
+function Set-Status($s, $color) { $script:LastStatus = $s }
 function Fmt($v, $f) { $v.ToString($f) }
 function Inv($f, $v) { $f -f $v }
 function Update-Readback { }
 function Update-TuneTexts { }
 function Save-Config { $script:Saved = $true }
 function Get-MVoltStatus { $script:Status }
-function Invoke-MVolt($a) { $script:Writes++; [pscustomobject]@{ Code = 0; Out = '' } }
+function Invoke-MVolt($a) { if ($script:ResetDuringCall) { $script:Hw.NvmlReinits++; $script:ResetDuringCall = $false }; $script:Writes++; [pscustomobject]@{ Code = 0; Out = '' } }
 Add-Type @'
 namespace ClevoTune {
  public static class NvApi {
@@ -30,13 +30,14 @@ namespace ClevoTune {
 }
 '@
 function Reset-Test {
-    $script:Cfg = [pscustomobject]@{ powerMax=''; powerLocked='test'; lastLock=0 }
-    $script:Hw = [pscustomobject]@{ Driver='test'; DefaultPowerW=160.0; MinPowerW=80.0; MaxPowerW=192.0; GpuPowerLimit=160.0; PowerLimitSupported=$false; NvmlOk=$false }
+    $script:Cfg = [pscustomobject]@{ powerMax=''; powerLocked='test'; lastLock=0; lastVolt=0 }
+    $script:Hw = [pscustomobject]@{ NvmlReinits=0; Driver='test'; DefaultPowerW=160.0; MinPowerW=80.0; MaxPowerW=192.0; GpuPowerLimit=160.0; PowerLimitSupported=$false; NvmlOk=$false }
     $script:Hw | Add-Member ScriptMethod RefreshPowerLimits { }
     $script:MVolt = 'mock'; $script:MVoltPowerW = [double]::NaN
     $script:PowerCapable = $true; $script:AppliedVolt = 0; $script:AppliedLock = 0
+    $script:AppliedVoltKnown = $true; $script:AppliedLockKnown = $true
     $script:PowerUnverified = $false; $script:Writes = 0; $script:Logs = @(); $script:Saved = $false
-    $script:Status = $null
+    $script:Status = $null; $script:ResetDuringCall = $false
     $script:ui = @{}
     foreach ($n in 'SlPower','LblPowerMin','LblPowerMax','SlCore','SlMem','SlLock','SlVolt','ChkLock','TxtLive') {
         $script:ui[$n] = [pscustomobject]@{ IsEnabled=$true; IsChecked=$false; Minimum=0; Maximum=192; Value=0; Text='' }
@@ -70,10 +71,43 @@ $script:Hw.MaxPowerW = 160.0
 Init-Tuning
 Assert ($ui.SlPower.Maximum -eq 185) 'Override above stock range must remain selectable'
 Write-Output 'Power-limit regressions passed (invalid status, verified ceiling, read-only recheck, external override).'
+Reset-Test
+$script:MVoltPowerW = 185
+$script:Status = @{power_limits=@{enforced_mw=160000}}
+Apply-Tuning 185 0 0 0 'test'
+Assert ($script:Writes -gt 0) 'Stale cached watts must not skip a power request'
+Reset-Test
+$script:Status = @{power_limits=@{enforced_mw=185000}}
+Apply-Tuning 180 0 0 0 'test'
+Assert ($script:LastStatus -notmatch '180 W') 'Above-target power must not be listed as successfully applied'
+Assert (($script:Logs -join ' ') -match 'Power requested 180 W; enforced 185 W') 'Report requested and enforced values separately'
+$script:AppliedVoltKnown = $true; $script:AppliedLockKnown = $true
+Invalidate-TuningReadback
+Assert (-not $script:AppliedVoltKnown -and -not $script:AppliedLockKnown) 'GPU reset invalidates both applied indicators'
+$script:Status = @{power_limits=@{enforced_mw=180000}}
+$script:Writes = 0
+Apply-Tuning 180 0 0 0 'test' 0
+Assert ($script:Writes -ge 1 -and $script:AppliedVoltKnown) 'Unknown voltage must be reapplied even when equal to remembered value'
+Reset-Test
+$script:Status = @{power_limits=@{enforced_mw=180000}}
+$script:ResetDuringCall = $true
+Apply-Tuning 180 0 0 0 'test' -10
+Assert (-not $script:AppliedVoltKnown -and -not $script:AppliedLockKnown) 'Reset during command must leave tuning unverified'
+Reset-Test
+$script:Cfg.powerLocked = ''
+$script:Hw.PowerLimitSupported = $true; $script:Hw.GpuPowerLimit = 185.0
+$script:Hw | Add-Member ScriptMethod NvmlText {param($code) return 'OK'}
+$script:Hw | Add-Member ScriptMethod SetPowerLimitW { param($w) return 0 }
+Apply-Tuning 180 0 0 0 'test'
+Assert ($script:LastStatus -notmatch '180 W') 'NVML above-target readback must not report requested watts as applied'
+$script:Hw.GpuPowerLimit = [double]::NaN
+Apply-Tuning 180 0 0 0 'test'
+Assert $script:PowerUnverified 'NVML success without readback must remain unverified'
 Add-Type -AssemblyName PresentationFramework
+function Get-OverlayWorkArea { [pscustomobject]@{Left=-1920;Top=100;Width=1920;Height=1080;Right=0;Bottom=1180} }
 $script:Cfg | Add-Member NoteProperty overlay ([pscustomobject]@{pos=4})
 $script:ovl = [pscustomobject]@{ActualWidth=300.0; ActualHeight=120.0; Left=0.0; Top=0.0}
-$wa = [System.Windows.SystemParameters]::WorkArea
+$wa = Get-OverlayWorkArea
 Position-Overlay
 Assert ($ovl.Left -eq $wa.Left + ($wa.Width - 300) / 2) 'Center horizontally'
 Assert ($ovl.Top -eq $wa.Top + ($wa.Height - 120) / 2) 'Center vertically'
@@ -83,4 +117,11 @@ Assert ($ovl.Left -eq $wa.Left + ($wa.Width - 420) / 2 -and $ovl.Top -eq $wa.Top
 $script:Cfg.overlay.pos = 1
 Position-Overlay
 Assert ($ovl.Left -eq $wa.Right - 420 - 12 -and $ovl.Top -eq $wa.Top + 12) 'Existing top-right position preserved'
-Write-Output 'Overlay placement checks passed.'
+foreach ($position in 5,6) {
+    $script:Cfg.overlay.pos = $position
+    Position-Overlay
+    Assert ($ovl.Left -eq $wa.Left + ($wa.Width - 420) / 2) 'Edge-center horizontally on negative-origin display'
+    $expected = if ($position -eq 5) { $wa.Top + 12 } else { $wa.Bottom - 200 - 12 }
+    Assert ($ovl.Top -eq $expected) 'Top/bottom center vertical placement'
+}
+Write-Output 'Overlay placement checks passed (negative screen origin, center, edge centers and resizing).'

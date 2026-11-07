@@ -2,6 +2,16 @@
 
 All notable changes to ClevoTune. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.6.5] - 2026-11-07
+### Fixed
+- Slow mVolt+ commands and update downloads keep the UI dispatcher, sensor polling and fan-control timer running. Concurrent tuning operations are blocked; timed-out subprocesses are terminated.
+- Manual fan modes return their fan to EC automatic control when its temperature feedback is unavailable. Detected overheating still takes priority and forces full cooling.
+- Voltage and clock-lock values are marked unknown at startup and after a GPU reset. A reset during tuning invalidates the result; unknown voltage settings are applied again instead of skipped.
+- Power targets are checked against fresh readback for NVML/NVAPI and mVolt+, with a warning for differences greater than 1 W in either direction. Logs distinguish requested and enforced watts.
+### Added
+- Overlay monitor selection, including primary-display fallback when a saved display is disconnected, plus **Top center** and **Bottom center** positions.
+- Regression checks for responsive subprocess/network waits, timeouts, operation serialization, resets during tuning, thermal failover and monitor selection.
+
 ## [1.6.4] - 2026-11-07
 ### Added
 - **Center** overlay position, saved with the other overlay settings and maintained when the overlay resizes.

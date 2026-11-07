@@ -5,9 +5,18 @@
 name=Italiano
 code=it
 base=en
-version=1.6.4
+version=1.6.5
 
 [strings]
+Monitor=Monitor
+Primary display=Schermo principale
+Display {0}=Schermo {0}
+Top center=In alto al centro
+Bottom center=In basso al centro
+Applied value unknown; apply to confirm=Valore applicato sconosciuto; applica per confermare
+GPU reset: previous voltage and clock-lock values are unverified=GPU reimpostata: valori precedenti di tensione e blocco frequenza non verificati
+Power requested {0} W; enforced {1} W=Potenza richiesta {0} W; imposta {1} W
+Temperature unavailable: EC auto=Temperatura non disponibile: EC automatico
 Center=Centro
 Re-check power limits=Ricontrolla i limiti di potenza
 Power request unverified=Richiesta di potenza non verificata

@@ -602,6 +602,8 @@
                         <ComboBoxItem Content="Bottom left"/>
                         <ComboBoxItem Content="Bottom right"/>
                         <ComboBoxItem Content="Center"/>
+                        <ComboBoxItem Content="Top center"/>
+                        <ComboBoxItem Content="Bottom center"/>
                       </ComboBox>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Margin="0,0,24,0">
@@ -613,6 +615,10 @@
                       <Slider x:Name="SlOvlOp" Minimum="0" Maximum="100" Value="55" TickFrequency="5" Margin="0,6,0,0"/>
                     </StackPanel>
                   </Grid>
+                  <StackPanel Margin="0,16,0,0" HorizontalAlignment="Left">
+                    <TextBlock Text="Monitor" Style="{StaticResource Small}" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="CmbOvlMonitor" MinWidth="260"/>
+                  </StackPanel>
                   <TextBlock Text="Show" Style="{StaticResource Small}" Margin="0,18,0,8"/>
                   <WrapPanel>
                     <CheckBox x:Name="OvlCpu" Content="CPU (temp/load/W)" Margin="0,0,24,8" IsChecked="True"/>

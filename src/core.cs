@@ -559,6 +559,17 @@ namespace ClevoTune
         public bool InfoCmd = true;
     }
 
+    public static class FanSafety
+    {
+        // Never leave a manual fan running without its CPU/GPU thermal feedback.
+        // A detected overheat still takes precedence and forces full cooling.
+        public static bool UseAutomatic(int fanIndex, bool emergency, double cpuTemp, double gpuTemp)
+        {
+            double temp = fanIndex == 1 ? cpuTemp : gpuTemp;
+            return !emergency && (double.IsNaN(temp) || double.IsInfinity(temp) || temp <= 0 || temp >= 125);
+        }
+    }
+
     public class Hw : IDisposable
     {
         [StructLayout(LayoutKind.Sequential)]
@@ -890,7 +901,8 @@ namespace ClevoTune
         {
             if (Ec == null) return;
             double hot = double.NaN;
-            if (!double.IsNaN(CpuTemp)) hot = CpuTemp;
+            double cT = !double.IsNaN(CpuTemp) ? CpuTemp : (Fans.Count > 0 ? Fans[0].EcTemp : double.NaN);
+            if (!double.IsNaN(cT)) hot = cT;
             double gT = !double.IsNaN(GpuTemp) ? GpuTemp : (Fans.Count > 1 ? Fans[1].EcTemp : double.NaN);   // EC fallback keeps the safety check working
             if (!double.IsNaN(gT)) hot = double.IsNaN(hot) ? gT : Math.Max(hot, gT);
             bool fs = !double.IsNaN(hot) && hot >= FailsafeTemp;
@@ -906,6 +918,15 @@ namespace ClevoTune
                     {
                         if (f.Manual) { Ec.SetAuto(f.Index); f.Manual = false; f.LastRaw = -1; f.CurPct = double.NaN; f.EffTemp = double.NaN; f.LoadEma = double.NaN; }
                         f.Status = "EC auto";
+                        continue;
+                    }
+                    if (FanSafety.UseAutomatic(f.Index, fs, cT, gT))
+                    {
+                        // Issue SetAuto even on first entry: another tool may have set manual mode.
+                        Ec.SetAuto(f.Index);
+                        f.Manual = false; f.LastRaw = -1; f.CurPct = double.NaN;
+                        f.EffTemp = double.NaN; f.LoadEma = double.NaN; f.InputTemp = double.NaN;
+                        f.Status = L.T("Temperature unavailable: EC auto");
                         continue;
                     }
                     double t = SourceValue(f, dt);

@@ -5,9 +5,18 @@
 name=English
 code=en-us
 base=en
-version=1.6.4
+version=1.6.5
 
 [strings]
+Monitor=Monitor
+Primary display=Primary display
+Display {0}=Display {0}
+Top center=Top center
+Bottom center=Bottom center
+Applied value unknown; apply to confirm=Applied value unknown; apply to confirm
+GPU reset: previous voltage and clock-lock values are unverified=GPU reset: previous voltage and clock-lock values are unverified
+Power requested {0} W; enforced {1} W=Power requested {0} W; enforced {1} W
+Temperature unavailable: EC auto=Temperature unavailable: EC auto
 Center=Center
 Re-check power limits=Re-check power limits
 Power request unverified=Power request unverified

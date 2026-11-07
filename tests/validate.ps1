@@ -14,6 +14,7 @@ Add-Type -AssemblyName PresentationFramework
 $window = [Windows.Markup.XamlReader]::Parse([IO.File]::ReadAllText((Join-Path $root 'src/main.xaml')))
 if (-not $window.FindName('BtnRecheckPower')) { throw 'Missing recheck button' }
 $positions = $window.FindName('CmbOvlPos').Items
-if ($positions.Count -ne 5 -or $positions[4].Content -ne 'Center') { throw 'Overlay positions changed unexpectedly' }
+if ($positions.Count -ne 7 -or $positions[4].Content -ne 'Center') { throw 'Overlay positions changed unexpectedly' }
+if (-not $window.FindName('CmbOvlMonitor')) { throw 'Missing monitor selector' }
 $window.Close()
 Write-Output 'Windows PowerShell source/generated script parsing, C# 5 compilation and WPF markup checks passed.'

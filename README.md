@@ -164,7 +164,9 @@ Below are 12 cards with the current value and a 60-second graph:
 
 **Undervolting on Ampere:** set a clock limit (e.g. 1800 MHz) and a positive core offset (e.g. +150 MHz). The GPU then reaches 1800 MHz at the voltage it would normally use for about 1650 MHz. ClevoTune does not set an absolute voltage. Public NVIDIA interfaces do not allow that on RTX 30 series cards, so use a dedicated tool such as mVolt+ for direct voltage control.
 
-Offsets and clock locks stay active until reboot or driver reset. Use a profile with auto-apply to restore them at every start.
+Offsets and clock locks stay active until reboot or driver reset. Use a profile with auto-apply to restore them at every start. ClevoTune marks remembered voltage and clock-lock values as unknown at startup and after detecting a GPU reset; it does not automatically reapply tuning after a reset. Apply your profile again to confirm the requested settings.
+
+Slow mVolt+ commands and update downloads keep the interface, sensors and fan-control timer responsive. Tuning controls are temporarily disabled while an operation runs to prevent overlapping changes. Command timeouts stop the child process and report failure.
 
 ### Profiles
 
@@ -227,7 +229,9 @@ Curves are also saved to the settings automatically whenever you change them.
 
 A small always-on-top text box with CPU (temp/load/W), GPU (temp/load/W), GPU clocks, fan speeds and RAM/VRAM.
 
-- Choose a corner or **Center**, font size, background opacity and which lines to show. Center positions the overlay in the middle of the primary display’s work area and stays centered when its size changes.
+- Choose a corner, **Center**, **Top center** or **Bottom center**, plus font size, background opacity and which lines to show.
+- **Monitor** selects the primary display or a specific connected display. Positions use that display's work area with device-pixel coordinates converted to WPF logical units. Centered positions follow size changes.
+- If the selected display is disconnected, the overlay falls back to the primary display without forgetting the saved selection; it moves back when that display returns. Reopen the monitor dropdown to refresh the connected-display list.
 - It is click-through, so it never blocks the mouse.
 - It shows over windowed and borderless games but not over exclusive full-screen games.
 - It does not show FPS.
@@ -275,6 +279,7 @@ Every polling interval ClevoTune:
 
 - If the CPU temperature can't be read from the MSR, the EC's own CPU temperature is used.
 - If a fan's curve input becomes unavailable, that fan is returned to EC automatic mode until the reading comes back.
+- In either Curve or Fixed mode, losing that fan's CPU/GPU temperature feedback (including the EC fallback) returns it to EC automatic control. If another available temperature detects overheating, the 100% safety override takes priority.
 
 **When the app closes**
 
@@ -315,7 +320,7 @@ lines 11–20  GPU fan % at 40, 45, 50, 55, 60, 65, 70, 75, 80, 85 °C
   - below the default limit: `--power-cap-watts <W>` (lowers the limit)
   - exactly the default: `--return-to-percentage` (releases the cap)
   - above the default: `--power <whole-number percent>`, then `--power-cap-watts <W>` if the percentage control is unavailable
-  - afterwards `--status` is read and the enforced limit is shown as "on card: … W (mVolt+)". If the card enforces less than requested, a ceiling is remembered for this driver and the slider is capped there. Use **Re-check power limits** after changing the BIOS override to discard that cached ceiling. If status is missing or invalid, the request is marked unverified; the requested wattage is never substituted as readback.
+  - afterwards `--status` is read and the enforced limit is shown as "on card: … W (mVolt+)". If the card enforces less than requested, a ceiling is remembered for this driver and the slider is capped there. Use **Re-check power limits** after changing the BIOS override to discard that cached ceiling. If status is missing or invalid, the request is marked unverified; the requested wattage is never substituted as readback. Requested and enforced watts are logged separately. Readback more than 1 W above or below the target is reported with a warning; NVML/NVAPI requests are verified too.
   - Without a BIOS override, earlier tests on the P775DM3-G's RTX 3080 could lower the limit but did not raise it above the 160 W default. An external mVolt+ BIOS override can change the reported active limit; confirm the enforced limit and actual power consumption separately under load.
   - If mVolt+ refuses everything, the slider is disabled for this driver version. A power value equal to what the card already enforces is not sent again.
 - **Core voltage offset:** runs `mVolt+ --core-vdemand <mV>` whenever the value differs from the one last applied.

@@ -5,9 +5,18 @@
 name=Deutsch
 code=de
 base=en
-version=1.6.4
+version=1.6.5
 
 [strings]
+Monitor=Monitor
+Primary display=Hauptbildschirm
+Display {0}=Bildschirm {0}
+Top center=Oben mittig
+Bottom center=Unten mittig
+Applied value unknown; apply to confirm=Angewendeter Wert unbekannt; zum Bestätigen anwenden
+GPU reset: previous voltage and clock-lock values are unverified=GPU zurückgesetzt: vorherige Spannungs- und Taktsperrwerte nicht verifiziert
+Power requested {0} W; enforced {1} W=Leistung angefordert {0} W; erzwungen {1} W
+Temperature unavailable: EC auto=Temperatur nicht verfügbar: EC automatisch
 Center=Mitte
 Re-check power limits=Leistungslimits erneut prüfen
 Power request unverified=Leistungsanforderung nicht verifiziert
