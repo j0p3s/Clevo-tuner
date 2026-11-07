@@ -299,7 +299,7 @@
             </Canvas>
           </Border>
           <TextBlock Text="ClevoTune" FontSize="15" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center"/>
-          <TextBlock x:Name="TxtVersion" Text="v1.6.2" Foreground="#6C727A" Margin="8,0,0,0" VerticalAlignment="Center"/>
+          <TextBlock x:Name="TxtVersion" Text="v1.6.3" Foreground="#6C727A" Margin="8,0,0,0" VerticalAlignment="Center"/>
           <TextBlock x:Name="TxtModel" Text="" Foreground="#6C727A" Margin="14,0,0,0" VerticalAlignment="Center"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

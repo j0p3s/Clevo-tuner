@@ -143,7 +143,7 @@ Below are 12 cards with the current value and a 60-second graph:
 | CPU LOAD | Windows performance counter (`% Processor Utility`) |
 | CPU POWER | Intel RAPL package energy counter |
 | RAM | used / total physical memory |
-| GPU TEMP / CLOCK / MEM / LOAD / POWER / VRAM | NVIDIA NVML |
+| GPU TEMP / CLOCK / MEM / LOAD / POWER / VRAM | NVIDIA NVML. Out-of-range values are rejected; after a GPU/driver reset ClevoTune reconnects automatically, and GPU TEMP shows the EC reading (marked "EC") meanwhile. |
 | GPU FAN | EC fan 2 duty (%) and RPM |
 
 ### GPU tuning tab
@@ -366,7 +366,7 @@ Each file looks like this:
 name=Français
 code=fr
 base=en
-version=1.6.2
+version=1.6.3
 
 [strings]
 GPU tuning=Réglage GPU

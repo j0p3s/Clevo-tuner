@@ -2,6 +2,11 @@
 
 All notable changes to ClevoTune. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.6.3] - 2026-11-07
+### Fixed
+- GPU readings after a driver/GPU reset (e.g. mVolt+ "Restart GPU" or resume from sleep): out-of-range values such as a 998277 MHz clock are rejected, and ClevoTune reconnects to NVML (and NVAPI) automatically when temperature and clock stay unreadable.
+- GPU temperature falls back to the EC reading (marked "EC" on the card) while NVML is unavailable, and the safety temperature check uses it too.
+
 ## [1.6.2] - 2026-11-07
 ### Fixed
 - A profile power value above the measured maximum of the card is reduced to that maximum, so it is not retried at every start.
@@ -95,4 +100,5 @@ All notable changes to ClevoTune. Versions follow [Semantic Versioning](https://
 ### Added
 - First release: sensor dashboard, GPU tuning (core/memory offsets, power limit, clock limit), profiles, EC fan curves, overlay, tray, start with Windows, automatic PawnIO setup.
 
+[1.6.3]: https://github.com/j0p3s/Clevo-tuner/releases/tag/v1.6.3
 [1.6.2]: https://github.com/j0p3s/Clevo-tuner/releases/tag/v1.6.2

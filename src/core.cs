@@ -329,6 +329,7 @@ namespace ClevoTune
         const int PP_INFO_SIZE = 184, PP_STATUS_SIZE = 72;
         static int verIdx = 0;
         public static bool Ready;
+        public static void Reset() { Ready = false; gpu = IntPtr.Zero; }
         public static string LastError = "";
 
         static Delegate Fn(uint id, Type t)
@@ -583,6 +584,7 @@ namespace ClevoTune
         public double GpuPower = double.NaN, GpuPowerLimit = double.NaN, VramUsed = double.NaN, VramTotal = double.NaN;
 
         public List<FanChannel> Fans = new List<FanChannel>();
+        public bool GpuTempFromEc;
         public double Hysteresis = 3, DownRate = 3, FailsafeTemp = 92, LoadSmoothSec = 3;
         public bool FailsafeActive;
         public List<string> Messages = new List<string>();
@@ -693,6 +695,7 @@ namespace ClevoTune
             ReadRam();
             ReadGpu();
             ReadFans();
+            if (double.IsNaN(GpuTemp) && Fans.Count > 1) GpuTempFromEc = !double.IsNaN(Fans[1].EcTemp); else GpuTempFromEc = false;
             Control(dtSec);
         }
 
@@ -740,19 +743,67 @@ namespace ClevoTune
             }
         }
 
+        int nvmlBadTicks;
+        DateTime nvmlLastReinit = DateTime.MinValue;
+        public int NvmlReinits;
+
+        // after a driver/GPU reset the cached NVML handle goes stale and returns errors or garbage
+        public bool ReinitNvml()
+        {
+            try { Nvml.Shutdown(); } catch { }
+            NvmlOk = false;
+            try
+            {
+                int st = Nvml.Init();
+                if (st == 0) st = Nvml.GetHandle(0, out dev);
+                NvmlOk = st == 0;
+                if (!NvmlOk) NvmlError = Nvml.ErrorString(st);
+                else
+                {
+                    uint a, b;
+                    if (Nvml.GetDefaultLimit(dev, out a) == 0) DefaultPowerW = a / 1000.0;
+                    if (Nvml.GetLimitConstraints(dev, out a, out b) == 0) { MinPowerW = a / 1000.0; MaxPowerW = b / 1000.0; }
+                }
+            }
+            catch (Exception ex) { NvmlError = ex.Message; NvmlOk = false; }
+            try { NvApi.Reset(); NvApi.Init(); } catch { }
+            NvmlReinits++;
+            return NvmlOk;
+        }
+
         void ReadGpu()
         {
-            if (!NvmlOk) return;
+            if (!NvmlOk)
+            {
+                if ((DateTime.Now - nvmlLastReinit).TotalSeconds >= 30) { nvmlLastReinit = DateTime.Now; if (ReinitNvml()) Msg("NVML: GPU found again"); }
+                if (!NvmlOk) { GpuTemp = GpuClock = MemClock = GpuPower = GpuLoad = double.NaN; return; }
+            }
             uint v;
-            GpuTemp = Nvml.GetTemp(dev, 0, out v) == 0 ? v : double.NaN;
-            GpuClock = Nvml.GetClock(dev, 0, out v) == 0 ? v : double.NaN;
-            MemClock = Nvml.GetClock(dev, 2, out v) == 0 ? v : double.NaN;
-            GpuPower = Nvml.GetPower(dev, out v) == 0 ? v / 1000.0 : double.NaN;
-            GpuPowerLimit = Nvml.GetEnforcedLimit(dev, out v) == 0 ? v / 1000.0 : double.NaN;
+            int stT = Nvml.GetTemp(dev, 0, out v);
+            GpuTemp = (stT == 0 && v > 0 && v < 125) ? v : double.NaN;
+            int stC = Nvml.GetClock(dev, 0, out v);
+            GpuClock = (stC == 0 && v < 4000) ? v : double.NaN;
+            int stM = Nvml.GetClock(dev, 2, out v);
+            MemClock = (stM == 0 && v < 20000) ? v : double.NaN;
+            int stP = Nvml.GetPower(dev, out v);
+            GpuPower = (stP == 0 && v < 1000000) ? v / 1000.0 : double.NaN;
+            GpuPowerLimit = (Nvml.GetEnforcedLimit(dev, out v) == 0 && v > 0 && v < 1000000) ? v / 1000.0 : double.NaN;
             Nvml.Util u;
-            GpuLoad = Nvml.GetUtil(dev, out u) == 0 ? u.Gpu : double.NaN;
+            int stU = Nvml.GetUtil(dev, out u);
+            GpuLoad = (stU == 0 && u.Gpu <= 100) ? u.Gpu : double.NaN;
             Nvml.Mem mm;
             if (Nvml.GetMem(dev, out mm) == 0) { VramTotal = mm.Total / 1073741824.0; VramUsed = mm.Used / 1073741824.0; }
+
+            // temperature and clock both unusable for 3 reads in a row: reconnect (at most every 30 s)
+            bool bad = double.IsNaN(GpuTemp) && double.IsNaN(GpuClock);
+            nvmlBadTicks = bad ? nvmlBadTicks + 1 : 0;
+            if (nvmlBadTicks >= 3 && (DateTime.Now - nvmlLastReinit).TotalSeconds >= 30)
+            {
+                nvmlLastReinit = DateTime.Now;
+                nvmlBadTicks = 0;
+                Msg(string.Format("NVML: invalid readings (temp {0}, clock {1}, power {2}, load {3}) - reconnecting to the GPU", stT, stC, stP, stU));
+                if (ReinitNvml()) Msg("NVML: reconnected"); else Msg("NVML: " + NvmlError);
+            }
         }
 
         void ReadFans()
@@ -828,7 +879,8 @@ namespace ClevoTune
             if (Ec == null) return;
             double hot = double.NaN;
             if (!double.IsNaN(CpuTemp)) hot = CpuTemp;
-            if (!double.IsNaN(GpuTemp)) hot = double.IsNaN(hot) ? GpuTemp : Math.Max(hot, GpuTemp);
+            double gT = !double.IsNaN(GpuTemp) ? GpuTemp : (Fans.Count > 1 ? Fans[1].EcTemp : double.NaN);   // EC fallback keeps the safety check working
+            if (!double.IsNaN(gT)) hot = double.IsNaN(hot) ? gT : Math.Max(hot, gT);
             bool fs = !double.IsNaN(hot) && hot >= FailsafeTemp;
             if (fs && !FailsafeActive) Msg(string.Format(L.T("Safety: {0} °C ≥ {1} °C → fans at 100%"), hot.ToString("0"), FailsafeTemp.ToString("0")));
             FailsafeActive = fs;

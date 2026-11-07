@@ -91,7 +91,7 @@ def main():
     ver, script = build_script()
     dist = os.path.join(ROOT, 'dist')
     os.makedirs(dist, exist_ok=True)
-    for old in glob.glob(os.path.join(dist, 'ClevoTune (v*)')):
+    for old in glob.glob(os.path.join(dist, 'ClevoTune (v*')):
         os.remove(old)
 
     write(os.path.join(ROOT, 'ClevoTune.cmd'), script)

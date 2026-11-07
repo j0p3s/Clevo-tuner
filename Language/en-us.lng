@@ -5,7 +5,7 @@
 name=English
 code=en-us
 base=en
-version=1.6.2
+version=1.6.3
 
 [strings]
 The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.=The card still enforces {0} W: on this GPU the power limit can be lowered, but not raised above {1} W. The slider maximum is now {1} W.

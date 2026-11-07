@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $AppName    = 'ClevoTune'
-$AppVersion = '1.6.2'
+$AppVersion = '1.6.3'
 
 $Self = $env:CT_SELF
 if (-not $Self) { $Self = $PSCommandPath }
@@ -858,7 +858,9 @@ function Update-Cards {
     Push-Card 'cpuPow' $hw.CpuPower '0' $null $null
     $script:Cards['ram'].Max = [Math]::Ceiling($hw.RamTotal)
     Push-Card 'ram' $hw.RamUsed '0.0' (' / ' + (Fmt $hw.RamTotal '0')) $null
-    Push-Card 'gpuTemp' $hw.GpuTemp '0' $null $null
+    $gt = $hw.GpuTemp; $gx = ''
+    if ([double]::IsNaN($gt) -and $f2 -and $hw.Ec -and -not [double]::IsNaN($f2.EcTemp)) { $gt = $f2.EcTemp; $gx = 'EC' }
+    Push-Card 'gpuTemp' $gt '0' $null $gx
     $rpm2 = ''; if ($f2 -and $f2.Present -and $hw.Ec) { $rpm2 = "$($f2.Rpm) RPM" }
     $d2 = [double]::NaN; if ($f2 -and $hw.Ec) { $d2 = $f2.DutyPct }
     Push-Card 'gpuFan' $d2 '0' $null $rpm2
@@ -1991,6 +1993,7 @@ $app.Add_SessionEnding({ try { $script:Hw.ReleaseAll() } catch { }; Save-Config 
 $app.Add_DispatcherUnhandledException({ param($sender, $e) Log ((T 'Unexpected error: {0}') -f $e.Exception.Message); $e.Handled = $true })
 
 # ---------------------------------------------------------------- timer loop
+$script:SeenReinits = 0
 $script:Timer = New-Object System.Windows.Threading.DispatcherTimer
 $script:Timer.Interval = [TimeSpan]::FromMilliseconds([int]$script:Cfg.interval)
 $script:Watch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -2000,6 +2003,7 @@ $script:Timer.Add_Tick({
         if ($dt -gt 10) { $dt = 1 }
         $script:Hw.Tick($dt)
         foreach ($m in $script:Hw.TakeMessages()) { Log $m }
+        if ($script:Hw.NvmlReinits -ne $script:SeenReinits) { $script:SeenReinits = $script:Hw.NvmlReinits; if ($script:Hw.NvmlOk) { Update-Header; Init-Tuning } }
         Update-Cards
         if ($win.IsVisible) {
             Update-FanUi
