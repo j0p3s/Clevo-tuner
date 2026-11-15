@@ -5,7 +5,7 @@
 name=English
 code=en-us
 base=en
-version=1.6.6
+version=1.7.0
 
 [strings]
 Monitor=Monitor
@@ -259,6 +259,10 @@ Installed — restart Windows to activate the driver=Installed — restart Windo
 Reinstall failed: {0}=Reinstall failed: {0}
 Reinstall failed — see log=Reinstall failed — see log
 Open ClevoTune=Open ClevoTune
+fan curves=fan curves
+Load CPU curve from profile=Load CPU curve from profile
+Load GPU curve from profile=Load GPU curve from profile
+Fan curve loaded from profile '{0}'=Fan curve loaded from profile '{0}'
 Apply profile: {0}=Apply profile: {0}
 Fans → automatic (EC)=Fans → automatic (EC)
 Exit (returns fans to the EC)=Exit (returns fans to the EC)

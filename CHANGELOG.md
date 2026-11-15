@@ -2,6 +2,10 @@
 
 All notable changes to ClevoTune. Versions follow [Semantic Versioning](https://semver.org/).
 
+## v1.7.0
+- Saving a profile now also stores the fan curves (mode, source, fixed % and points of both fans). Loading a profile, applying it from the tray, and the on-open/startup profile restore its curves too. Older profiles without curves keep the current ones.
+- Tray right-click menu: **Load CPU curve from profile** and **Load GPU curve from profile**.
+
 ## v1.6.6
 - Harden Windows Task Scheduler startup: elevated interactive logon, 15-second delay, battery support, unlimited runtime and missed-start recovery.
 - Safely encode CMD launch paths and set the working directory for both launchers.

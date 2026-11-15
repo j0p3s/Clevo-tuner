@@ -15,7 +15,7 @@ exit /b
 # https://github.com/j0p3s/Clevo-tuner
 $ErrorActionPreference = 'Stop'
 $AppName    = 'ClevoTune'
-$AppVersion = '1.6.6'
+$AppVersion = '1.7.0'
 
 $Self = $env:CT_SELF
 if (-not $Self) { $Self = $PSCommandPath }
@@ -277,6 +277,10 @@ Installed — restart Windows to activate the driver	Instalado — reinicia o Wi
 Reinstall failed: {0}	Falha na reinstalação: {0}	Échec de la réinstallation : {0}	Falló la reinstalación: {0}	Neuinstallation fehlgeschlagen: {0}	Reinstallazione non riuscita: {0}
 Reinstall failed — see log	Falha na reinstalação — ver registo	Échec de la réinstallation — voir le journal	Falló la reinstalación — ver registro	Neuinstallation fehlgeschlagen — siehe Protokoll	Reinstallazione non riuscita — vedi registro
 Open ClevoTune	Abrir ClevoTune	Ouvrir ClevoTune	Abrir ClevoTune	ClevoTune öffnen	Apri ClevoTune
+fan curves	curvas de ventoinhas	courbes de ventilateurs	curvas de ventiladores	Lüfterkurven	curve delle ventole
+Load CPU curve from profile	Carregar curva da CPU do perfil	Charger la courbe CPU depuis le profil	Cargar curva de CPU del perfil	CPU-Kurve aus Profil laden	Carica curva CPU dal profilo
+Load GPU curve from profile	Carregar curva da GPU do perfil	Charger la courbe GPU depuis le profil	Cargar curva de GPU del perfil	GPU-Kurve aus Profil laden	Carica curva GPU dal profilo
+Fan curve loaded from profile '{0}'	Curva de ventoinha carregada do perfil '{0}'	Courbe de ventilateur chargée depuis le profil « {0} »	Curva de ventilador cargada del perfil '{0}'	Lüfterkurve aus Profil '{0}' geladen	Curva ventola caricata dal profilo '{0}'
 Apply profile: {0}	Aplicar perfil: {0}	Appliquer le profil : {0}	Aplicar perfil: {0}	Profil anwenden: {0}	Applica profilo: {0}
 Fans → automatic (EC)	Ventoinhas → automático (EC)	Ventilateurs → automatique (EC)	Ventiladores → automático (EC)	Lüfter → automatisch (EC)	Ventole → automatico (EC)
 Exit (returns fans to the EC)	Sair (devolve ventoinhas ao EC)	Quitter (rend les ventilateurs à l'EC)	Salir (devuelve los ventiladores al EC)	Beenden (Lüfter zurück an den EC)	Esci (restituisce le ventole all'EC)
@@ -1640,15 +1644,20 @@ Set-Lang (Resolve-Lang ([string]$script:Cfg.lang))
 $script:Dirty = $false
 $script:LastSave = [DateTime]::MinValue
 
+function Get-FanSnapshot {
+    # current fan settings (mode, source, fixed %, curve points) as plain objects, stored in settings and in profiles
+    $fans = @()
+    foreach ($f in $script:Hw.Fans) {
+        $pts = @()
+        foreach ($p in $f.Points) { $pts += [pscustomobject]@{ t = $p.Temp; p = $p.Pct } }
+        $fans += [pscustomobject]@{ index = $f.Index; mode = $f.Mode; source = $f.Source; fixed = $f.Fixed; points = $pts }
+    }
+    return , $fans
+}
+
 function Save-Config {
     try {
-        $fans = @()
-        foreach ($f in $script:Hw.Fans) {
-            $pts = @()
-            foreach ($p in $f.Points) { $pts += [pscustomobject]@{ t = $p.Temp; p = $p.Pct } }
-            $fans += [pscustomobject]@{ index = $f.Index; mode = $f.Mode; source = $f.Source; fixed = $f.Fixed; points = $pts }
-        }
-        $script:Cfg.fans = $fans
+        $script:Cfg.fans = Get-FanSnapshot
         $json = $script:Cfg | ConvertTo-Json -Depth 8
         [IO.File]::WriteAllText($CfgPath, $json, (New-Object Text.UTF8Encoding($false)))
         $script:Dirty = $false
@@ -3314,7 +3323,33 @@ function Profile-Text($p) {
     $a += ((T 'core {0}') -f (Signed $p.core)); $a += "mem $(Signed $p.mem)"
     if ([int]$p.lock -gt 0) { $a += (((T 'limit {0}') -f $p.lock) + ' MHz') }
     if ([int]$p.volt -ne 0) { $a += ((T 'voltage {0} mV') -f (Signed ([int]$p.volt))) }
+    if ($p.PSObject.Properties.Name -contains 'fans' -and @($p.fans).Count -gt 0) { $a += (T 'fan curves') }
     return ($a -join ' / ') + '   —   ' + (T 'Load fills the sliders, Apply writes them')
+}
+function Load-ProfileFans($p, [int]$only = 0) {
+    # restore the fan curves saved with a profile (only = 1 CPU fan, 2 GPU fan, 0 both); false if the profile has none
+    if (-not $p -or -not ($p.PSObject.Properties.Name -contains 'fans') -or @($p.fans).Count -eq 0) { return $false }
+    $done = $false
+    foreach ($cf in @($p.fans)) {
+        $idx = [int]$cf.index
+        if ($idx -lt 1 -or $idx -gt $script:Hw.Fans.Count) { continue }
+        if ($only -gt 0 -and $idx -ne $only) { continue }
+        $f = $script:Hw.Fans[$idx - 1]
+        $pts = @($cf.points)
+        if ($pts.Count -eq 0) { continue }
+        $f.Mode = [int]$cf.mode; $f.Source = [int]$cf.source; $f.Fixed = [int]$cf.fixed
+        $f.Points.Clear()
+        foreach ($q in $pts) { $f.Points.Add((New-Object ClevoTune.CurvePoint([int]$q.t, [int]$q.p))) }
+        if ($script:Cfg.cfcGrid -and -not (Test-OnGrid $f)) { Set-GridPoints $f (Get-GridValues $f) }
+        $f.EffTemp = [double]::NaN
+        $done = $true
+    }
+    if ($done) {
+        $script:Dirty = $true
+        if ($script:SelFan) { Select-Fan $script:SelFan }
+        Save-Config
+    }
+    return $done
 }
 function Get-Profile([string]$name) { foreach ($p in $script:Cfg.profiles) { if ($p.name -eq $name) { return $p } }; return $null }
 function Get-LastProfile {
@@ -3357,6 +3392,7 @@ function Load-ProfileToSliders($p) {
     $ui.SlVolt.Value = [int]$p.volt
     $script:Loading = $false
     Update-TuneTexts
+    [void](Load-ProfileFans $p)
 }
 $ui.BtnLoad.Add_Click({
     $p = Get-Profile ([string]$ui.CmbProfiles.SelectedItem)
@@ -3374,8 +3410,9 @@ $ui.BtnSaveAs.Add_Click({
         if ($r -ne 'Yes') { return }
         $p.power = $s.power; $p.core = $s.core; $p.mem = $s.mem; $p.lock = $s.lock
         $p | Add-Member -NotePropertyName volt -NotePropertyValue $s.volt -Force
+        $p | Add-Member -NotePropertyName fans -NotePropertyValue (Get-FanSnapshot) -Force
     } else {
-        $script:Cfg.profiles = @($script:Cfg.profiles) + [pscustomobject]@{ name = $name; power = $s.power; core = $s.core; mem = $s.mem; lock = $s.lock; volt = $s.volt }
+        $script:Cfg.profiles = @($script:Cfg.profiles) + [pscustomobject]@{ name = $name; power = $s.power; core = $s.core; mem = $s.mem; lock = $s.lock; volt = $s.volt; fans = (Get-FanSnapshot) }
     }
     $script:Cfg.selectedProfile = $name
     $script:Cfg.lastProfile = $name
@@ -4129,6 +4166,21 @@ function Build-TrayMenu {
             $pp = Get-Profile ([string]$sender.Tag)
             if ($pp -and -not $script:OperationBusy) { Load-ProfileToSliders $pp; Apply-Tuning ([int]$pp.power) ([int]$pp.core) ([int]$pp.mem) ([int]$pp.lock) ((T "Profile '{0}':") -f $pp.name) ([int]$pp.volt) }
         })
+    }
+    foreach ($fi in @(@(1, 'Load CPU curve from profile'), @(2, 'Load GPU curve from profile'))) {
+        $sub = New-Object System.Windows.Forms.ToolStripMenuItem((T $fi[1]))
+        foreach ($p in $script:Cfg.profiles) {
+            if (-not ($p.PSObject.Properties.Name -contains 'fans') -or @($p.fans).Count -eq 0) { continue }
+            $si = $sub.DropDownItems.Add([string]$p.name)
+            $si.Tag = "$($fi[0])|$($p.name)"
+            $si.Add_Click({ param($sender, $e)
+                $parts = ([string]$sender.Tag).Split('|', 2)
+                $pp = Get-Profile $parts[1]
+                if ($pp -and (Load-ProfileFans $pp ([int]$parts[0]))) { Set-Status ((T "Fan curve loaded from profile '{0}'") -f $pp.name) $Green }
+            })
+        }
+        if ($sub.DropDownItems.Count -eq 0) { $sub.Enabled = $false }
+        [void]$menu.Items.Add($sub)
     }
     [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
     $a = $menu.Items.Add((T 'Fans → automatic (EC)')); $a.Add_Click({ Set-AllAuto })
