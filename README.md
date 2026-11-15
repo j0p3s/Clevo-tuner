@@ -55,7 +55,7 @@ ClevoTune shows live CPU, GPU and memory sensors, applies GPU clock offsets, pow
   - power limit (TGP), when the vBIOS allows it (NVML, with the NVAPI power target as a fallback for laptop GPUs)
   - maximum clock limit (NVML clock lock). Combined with a positive core offset, this gives the usual Ampere undervolt.
 - **mVolt+ integration** (optional): when the NVIDIA driver blocks the power limit, ClevoTune sets it through [mVolt+](https://github.com/b00nz/mVolt)'s command line. It also adds a core voltage offset slider driven by mVolt+.
-- **Profiles** that store the GPU settings. The last profile you saved is applied automatically every time the app opens.
+- **Profiles** that store the GPU settings and both fan curves. The last profile you saved is applied automatically every time the app opens.
 - **Custom fan control** for the CPU fan and the GPU fan:
   - **Auto (EC)**: the laptop's own fan behavior
   - **Curve**: speed follows a curve you draw or type in a table
@@ -170,13 +170,13 @@ Slow mVolt+ commands and update downloads keep the interface, sensors and fan-co
 
 ### Profiles
 
-- **Load** fills the sliders with the selected profile. **Apply** then writes them to the GPU.
-- **Save as…** stores the current slider values under a name, replacing a profile with the same name if you confirm.
+- **Load** fills the sliders with the selected profile and restores its fan curves right away. **Apply** then writes the sliders to the GPU.
+- **Save as…** stores the current slider values and fan curves under a name, replacing a profile with the same name if you confirm.
 - **Delete** removes the selected profile. At least one profile must remain.
 - **Apply the last profile on open** (on by default): every time ClevoTune opens, it applies the profile you saved most recently. The built-in `Stock` profile alone is never auto-applied.
 - **Start with Windows (at sign-in)**: see [Starting with Windows](#starting-with-windows--task-scheduler).
 
-A profile stores the power limit (0 = leave unchanged), core offset, memory offset, clock limit (0 = off) and core voltage offset (mVolt+).
+A profile stores the power limit (0 = leave unchanged), core offset, memory offset, clock limit (0 = off) and core voltage offset (mVolt+). It also stores the settings of both fans: mode, curve input, fixed % and curve points. Profiles saved before v1.7.0 have no curves; loading them leaves the current curves unchanged until you save them again. The profile applied on open, **Apply profile** in the tray and **Load** all restore the curves too.
 
 ### Fans tab
 
@@ -214,7 +214,7 @@ Select a fan on the left, then choose:
 | Save curves | saves the settings and writes `userfancurve.cfg` next to the program |
 | Return all to EC (auto) | gives both fans back to the laptop's automatic control |
 
-Curves are also saved to the settings automatically whenever you change them.
+Curves are also saved to the settings automatically whenever you change them. To keep different curves per profile, use **Save as…** in the Profiles panel.
 
 **Behavior settings**
 
@@ -258,7 +258,9 @@ A small always-on-top text box with CPU (temp/load/W), GPU (temp/load/W), GPU cl
 The tooltip shows the current CPU and GPU temperatures. Left-click or double-click opens the window. Right-click menu:
 
 - Open ClevoTune
-- Apply profile: *name*, one entry per profile
+- Apply profile: *name*, one entry per profile (also restores its fan curves)
+- Load CPU curve from profile ▸ *name*: loads only the CPU fan's settings and curve from a profile that has saved curves
+- Load GPU curve from profile ▸ *name*: the same for the GPU fan
 - Fans → automatic (EC)
 - Start with Windows (checkable)
 - Exit (returns fans to the EC)
