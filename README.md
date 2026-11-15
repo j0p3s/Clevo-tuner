@@ -8,7 +8,10 @@ A monitoring, GPU tuning and fan control tool for the **Clevo P775DM3-G** (Intel
 
 ClevoTune shows live CPU, GPU and memory sensors, applies GPU clock offsets, power limits and clock locks, and replaces the laptop's built-in fan behavior with your own temperature-based or load-based fan curves. It ships as a single `.exe` (or an equivalent `.cmd`), with no installer.
 
-![ClevoTune – Fans tab](docs/screenshot.png)
+![ClevoTune – GPU tuning](docs/screenshot-tuning.png)
+![ClevoTune – Fans tab](docs/screenshot-fans.png)
+![ClevoTune – Overlay tab](docs/screenshot-overlay.png)
+![ClevoTune – Settings tab](docs/screenshot-settings.png)
 
 **[⬇ Download the latest release](https://github.com/j0p3s/Clevo-tuner/releases/latest)**: get `ClevoTune.vX.Y.Z.zip`, extract it to a permanent folder and run `ClevoTune (vX.Y.Z).exe`.
 
