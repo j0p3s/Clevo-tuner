@@ -523,3 +523,7 @@ The C# core is embedded in the script and compiled by Windows PowerShell on the 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 — see [LICENSE](LICENSE).
