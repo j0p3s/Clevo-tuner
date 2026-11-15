@@ -54,7 +54,7 @@
 ## 6. Next steps
 1. Ask the user to confirm v1.6.3 GPU readings after a GPU reset: the log should show `NVML: … reconnecting` / `reconnected`.
 2. After applying/changing the external mVolt+ BIOS override, use **Re-check power limits**. It clears `cfg.powerMax`/`cfg.powerLocked`, queries NVML/mVolt+ and never applies tuning. Confirm both reported limits and measured draw under load.
-3. Ask which LICENSE to add (none yet).
+3. License: GPL-3.0 (see `LICENSE`).
 4. For every release:
    - bump `$AppVersion` in `src/app.ps1:3`
    - add a `CHANGELOG.md` entry
