@@ -5,7 +5,7 @@
 name=Español
 code=es
 base=en
-version=1.6.6
+version=1.7.0
 
 [strings]
 Monitor=Monitor
@@ -259,6 +259,10 @@ Installed — restart Windows to activate the driver=Instalado — reinicia Wind
 Reinstall failed: {0}=Falló la reinstalación: {0}
 Reinstall failed — see log=Falló la reinstalación — ver registro
 Open ClevoTune=Abrir ClevoTune
+fan curves=curvas de ventiladores
+Load CPU curve from profile=Cargar curva de CPU del perfil
+Load GPU curve from profile=Cargar curva de GPU del perfil
+Fan curve loaded from profile '{0}'=Curva de ventilador cargada del perfil '{0}'
 Apply profile: {0}=Aplicar perfil: {0}
 Fans → automatic (EC)=Ventiladores → automático (EC)
 Exit (returns fans to the EC)=Salir (devuelve los ventiladores al EC)

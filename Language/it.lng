@@ -5,7 +5,7 @@
 name=Italiano
 code=it
 base=en
-version=1.6.6
+version=1.7.0
 
 [strings]
 Monitor=Monitor
@@ -259,6 +259,10 @@ Installed — restart Windows to activate the driver=Installato — riavvia Wind
 Reinstall failed: {0}=Reinstallazione non riuscita: {0}
 Reinstall failed — see log=Reinstallazione non riuscita — vedi registro
 Open ClevoTune=Apri ClevoTune
+fan curves=curve delle ventole
+Load CPU curve from profile=Carica curva CPU dal profilo
+Load GPU curve from profile=Carica curva GPU dal profilo
+Fan curve loaded from profile '{0}'=Curva ventola caricata dal profilo '{0}'
 Apply profile: {0}=Applica profilo: {0}
 Fans → automatic (EC)=Ventole → automatico (EC)
 Exit (returns fans to the EC)=Esci (restituisce le ventole all'EC)

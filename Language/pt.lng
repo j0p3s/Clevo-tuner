@@ -5,7 +5,7 @@
 name=Português
 code=pt
 base=en
-version=1.6.6
+version=1.7.0
 
 [strings]
 Monitor=Monitor
@@ -259,6 +259,10 @@ Installed — restart Windows to activate the driver=Instalado — reinicia o Wi
 Reinstall failed: {0}=Falha na reinstalação: {0}
 Reinstall failed — see log=Falha na reinstalação — ver registo
 Open ClevoTune=Abrir ClevoTune
+fan curves=curvas de ventoinhas
+Load CPU curve from profile=Carregar curva da CPU do perfil
+Load GPU curve from profile=Carregar curva da GPU do perfil
+Fan curve loaded from profile '{0}'=Curva de ventoinha carregada do perfil '{0}'
 Apply profile: {0}=Aplicar perfil: {0}
 Fans → automatic (EC)=Ventoinhas → automático (EC)
 Exit (returns fans to the EC)=Sair (devolve ventoinhas ao EC)
