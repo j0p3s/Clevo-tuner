@@ -4,7 +4,7 @@
 - A single-file Windows tool (`.exe` + equivalent `.cmd`) for the owner's Clevo P775DM3-G (i7-8700K + RTX 3080 Laptop, DEV_24DC, vBIOS 94.04.46.00.15, driver 621.12): live sensors, GPU tuning and custom EC fan curves. It replaces Clevo Control Center and MSI Afterburner on this laptop.
 
 ## 2. Current status
-- **v1.7.0** (`main`; release dispatched via workflow, confirm in Actions that it published). v1.7.0 adds fan curves to profiles (see below); not run on Windows or hardware yet. Previously **v1.6.6** (`main` + release v1.6.5, assets `ClevoTune.v1.6.5.{zip,exe,cmd}`). Earlier versions were tested on the user's hardware with these features working; v1.6.5 has automated Windows validation but still needs hardware confirmation:
+- **v1.7.0** (`main`, released as `v1.7.0`; the release workflow succeeded, including `validate.ps1`, `power-limits.ps1` and `runtime.ps1` on Windows). It adds fan curves to profiles (see below); not yet confirmed on the user's hardware. `main` also has later docs-only commits (README/HANDOFF updates and new per-tab screenshots in `docs/`, personal info redacted) that are not in the v1.7.0 zip; they ship with the next release. Previously **v1.6.6** (`main` + release v1.6.5, assets `ClevoTune.v1.6.5.{zip,exe,cmd}`). Earlier versions were tested on the user's hardware with these features working; v1.6.5 has automated Windows validation but still needs hardware confirmation:
   - sensors
   - fan curves (temperature/load, ClevoFanControl import/export)
   - core/memory offsets and clock lock
@@ -54,6 +54,7 @@
 - `README.md` (user docs, English), `CHANGELOG.md` (one entry per version).
 
 ## 6. Next steps
+0. Ask the user to test v1.7.0 on hardware: save a profile (Save as…), change the curves, Load it and confirm the curves return; try the tray entries "Load CPU/GPU curve from profile". Old profiles have no `fans` until re-saved.
 1. Ask the user to confirm v1.6.3 GPU readings after a GPU reset: the log should show `NVML: … reconnecting` / `reconnected`.
 2. After applying/changing the external mVolt+ BIOS override, use **Re-check power limits**. It clears `cfg.powerMax`/`cfg.powerLocked`, queries NVML/mVolt+ and never applies tuning. Confirm both reported limits and measured draw under load.
 3. License: GPL-3.0 (see `LICENSE`).
@@ -65,6 +66,9 @@
    - run `gh api -X POST repos/j0p3s/Clevo-tuner/actions/workflows/release.yml/dispatches -f ref=main -f 'inputs[version]=X.Y.Z'`
 
 ## 7. Open questions / gotchas
+- **Release notes:** the v1.7.0 release body only says "See CHANGELOG.md" because `.github/release_notes.py` did not match the `## v1.7.0` header (older entries use `## [x.y.z] - date`). Use the bracketed format in the next CHANGELOG entry, or fix the script.
+- **Fan count (decided: not changing):** the app deliberately has a fixed CPU fan + GPU fan (see section 3). Auto-detecting 3-fan models was discussed and declined by the user; a naive probe would report junk fan 3 as present because `DetectFans` only checks that the EC reads do not throw. Do not implement unless asked.
+- **Screenshots:** `docs/screenshot-{tuning,fans,overlay,settings}.png` are v1.6.6 UI. They were redacted by painting over the profile name in the Auto-apply chip and the install path in the mVolt+ line; redo this for any new screenshots.
 - Local Windows validation is available (no physical GPU verification performed):
   - `powershell -NoProfile -STA -File tests/validate.ps1`
   - `powershell -NoProfile -File tests/power-limits.ps1`
