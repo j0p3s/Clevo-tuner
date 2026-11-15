@@ -4,12 +4,13 @@
 - A single-file Windows tool (`.exe` + equivalent `.cmd`) for the owner's Clevo P775DM3-G (i7-8700K + RTX 3080 Laptop, DEV_24DC, vBIOS 94.04.46.00.15, driver 621.12): live sensors, GPU tuning and custom EC fan curves. It replaces Clevo Control Center and MSI Afterburner on this laptop.
 
 ## 2. Current status
-- **v1.6.6** (`main` + release v1.6.5, assets `ClevoTune.v1.6.5.{zip,exe,cmd}`). Earlier versions were tested on the user's hardware with these features working; v1.6.5 has automated Windows validation but still needs hardware confirmation:
+- **v1.7.0** (`main`; release dispatched via workflow, confirm in Actions that it published). v1.7.0 adds fan curves to profiles (see below); not run on Windows or hardware yet. Previously **v1.6.6** (`main` + release v1.6.5, assets `ClevoTune.v1.6.5.{zip,exe,cmd}`). Earlier versions were tested on the user's hardware with these features working; v1.6.5 has automated Windows validation but still needs hardware confirmation:
   - sensors
   - fan curves (temperature/load, ClevoFanControl import/export)
   - core/memory offsets and clock lock
   - mVolt+ core voltage offset (`--core-vdemand` exit 0)
   - automatic PawnIO and mVolt+ install, tray, start with Windows, 6 languages
+- v1.7.0: a profile now also stores `fans` (array of `{index, mode, source, fixed, points[{t,p}]}`, same shape as `cfg.fans`) via `Get-FanSnapshot` (`src/app.ps1:340`, also used by `Save-Config`). `Load-ProfileFans` (`:1312`) restores it, optionally for one fan only; `Load-ProfileToSliders` calls it, so the Load button, tray apply and on-open/startup profile restore curves (and Load applies them to the fans immediately, unlike sliders). Profiles without `fans` (older configs) are skipped. Tray menu (`Build-TrayMenu :2140`) has submenus "Load CPU/GPU curve from profile" (Tag = `fanIndex|profileName`). If `cfcGrid` is on, loaded off-grid curves are converted to the 40–85 grid.
 - v1.6.3 (NVML reconnect after a GPU reset) has not yet been confirmed on the user's PC.
 - v1.6.4 added read-only power-limit recheck after an external BIOS override, honest unverified mVolt+ readback, fresh readback on refresh, and Center overlay position. Windows regression/markup/C# 5 checks pass locally; release workflow repeats them before publishing.
 - User screenshot shows BIOS override active with 160 W default and 185 W active. Actual draw above 160 W under load remains unverified.
@@ -40,7 +41,8 @@
 - `src/app.ps1` — the app. Key places:
   - UI logic, timer `:2000`
   - tuning: `Init-Tuning :918`, `Apply-Tuning :1028`
-  - setup `:487`, languages `:120`, autostart `:1270`, fan curve UI `:1472`, `.cfg` import `:1657`
+  - profiles `:1303` (`Profile-Text`, `Load-ProfileFans`, `Fill-Profiles`), tray menu `:2140`
+  - setup `:487`, languages `:120`, autostart `:1270`, fan curve UI `:1479`, `.cfg` import `:1815` (line numbers approximate)
 - `src/core.cs` — C# core:
   - `PawnIo :27`, `ClevoEc :89`, `NvApi :314`, `Hw :562`
   - NVML reconnect `:751`, `ReadGpu :774`, fan `Control :877`
@@ -75,4 +77,5 @@
 - **Line endings:** `ClevoTune.cmd` is stored with `-text` (CRLF); batch breaks with LF.
 - **Config:** `%APPDATA%\ClevoTune\config.json`. `powerLocked` / `powerMax` are keyed by driver version.
 - **Scheduled task:** enabled startup is refreshed to the current version path on launch. Elevated interactive logon, 15 s delay, battery support, StartWhenAvailable, unlimited runtime; registration/removal errors terminate and are logged. `tests/startup.ps1` validates task construction without registering a real task.
+- **Profiles with curves:** older profiles have no `fans` property; code must test `PSObject.Properties.Name -contains 'fans'`. The v1.7.0 change was made from a Linux session without PowerShell/.NET, so it still needs `tests/validate.ps1` (the release workflow runs it) and a hardware check: save a profile, change curves, Load, confirm the curves return; try the tray CPU/GPU curve entries.
 - **Clevo Control Center** must be closed, or it overrides the fan curves.
