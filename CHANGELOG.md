@@ -2,6 +2,9 @@
 
 All notable changes to ClevoTune. Versions follow [Semantic Versioning](https://semver.org/).
 
+## v1.7.1
+- Profiles and fan curves are now saved safely: settings are written to a temporary file and swapped in, keeping the previous version as `config.json.bak`. If `config.json` is ever unreadable (for example after a power loss or reboot during a save), ClevoTune restores the backup instead of silently starting with empty settings and overwriting your profiles. The broken file is kept as `config.json.corrupt`.
+
 ## v1.7.0
 - Saving a profile now also stores the fan curves (mode, source, fixed % and points of both fans). Loading a profile, applying it from the tray, and the on-open/startup profile restore its curves too. Older profiles without curves keep the current ones.
 - Tray right-click menu: **Load CPU curve from profile** and **Load GPU curve from profile**.

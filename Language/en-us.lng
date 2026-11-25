@@ -5,7 +5,7 @@
 name=English
 code=en-us
 base=en
-version=1.7.0
+version=1.7.1
 
 [strings]
 Monitor=Monitor

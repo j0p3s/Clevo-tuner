@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $AppName    = 'ClevoTune'
-$AppVersion = '1.7.0'
+$AppVersion = '1.7.1'
 
 $Self = $env:CT_SELF
 if (-not $Self) { $Self = $PSCommandPath }
@@ -314,19 +314,35 @@ function Merge-Defaults($cfg, $def) {
     }
 }
 
+function Read-ConfigFile([string]$path) {
+    $c = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($null -eq $c) { throw 'empty settings file' }
+    return $c
+}
+
 function Load-Config {
     $def = New-DefaultConfig
     if (Test-Path -LiteralPath $CfgPath) {
-        try {
-            $c = Get-Content -LiteralPath $CfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            Merge-Defaults $c $def
-            $c.profiles = @($c.profiles)
-            $c.fans = @($c.fans)
-            $c.fans = @($c.fans | Where-Object { [int]$_.index -le 2 })
-            foreach ($f in $c.fans) { $f.points = @($f.points) }
-            if ($c.profiles.Count -eq 0) { $c.profiles = $def.profiles }
-            return $c
-        } catch { }
+        $c = $null
+        try { $c = Read-ConfigFile $CfgPath } catch {
+            # unreadable (e.g. a write cut short by a power loss or reboot): keep the broken file and use the last good copy
+            Log ('Settings file unreadable: {0}' -f $_.Exception.Message)
+            try { Copy-Item -LiteralPath $CfgPath -Destination ($CfgPath + '.corrupt') -Force } catch { }
+            if (Test-Path -LiteralPath ($CfgPath + '.bak')) {
+                try { $c = Read-ConfigFile ($CfgPath + '.bak'); Log 'Settings restored from config.json.bak' } catch { }
+            }
+        }
+        if ($c) {
+            try {
+                Merge-Defaults $c $def
+                $c.profiles = @($c.profiles)
+                $c.fans = @($c.fans)
+                $c.fans = @($c.fans | Where-Object { [int]$_.index -le 2 })
+                foreach ($f in $c.fans) { $f.points = @($f.points) }
+                if ($c.profiles.Count -eq 0) { $c.profiles = $def.profiles }
+                return $c
+            } catch { }
+        }
     }
     return $def
 }
@@ -352,7 +368,12 @@ function Save-Config {
     try {
         $script:Cfg.fans = Get-FanSnapshot
         $json = $script:Cfg | ConvertTo-Json -Depth 8
-        [IO.File]::WriteAllText($CfgPath, $json, (New-Object Text.UTF8Encoding($false)))
+        # write to a temporary file first, then swap it in and keep the previous version as config.json.bak,
+        # so a power loss or reboot in the middle of a save can never leave profiles and curves half-written
+        $tmp = $CfgPath + '.tmp'
+        [IO.File]::WriteAllText($tmp, $json, (New-Object Text.UTF8Encoding($false)))
+        if (Test-Path -LiteralPath $CfgPath) { [IO.File]::Replace($tmp, $CfgPath, ($CfgPath + '.bak')) }
+        else { [IO.File]::Move($tmp, $CfgPath) }
         $script:Dirty = $false
         $script:LastSave = Get-Date
     } catch { Log ((T 'Error saving settings: {0}') -f $_.Exception.Message) }

@@ -411,7 +411,7 @@ If the program folder is not writable, the language files are kept in `%APPDATA%
 | `<program folder>\Language\` | `.lng` translation files (English base) |
 | `<program folder>\userfancurve.cfg` | written by **Save curves** |
 | `<program folder>\mVolt+\` | `mVolt+.exe` and `version.txt` (kept up to date automatically) |
-| `%APPDATA%\ClevoTune\config.json` | all settings: profiles, fan curves, overlay, language, etc. |
+| `%APPDATA%\ClevoTune\config.json` | all settings: profiles, fan curves, overlay, language, etc. (previous save kept as `config.json.bak`, used automatically if the file is damaged) |
 | `%APPDATA%\ClevoTune\clevotune.log` | activity log, reset at 512 KB |
 | `%LOCALAPPDATA%\ClevoTune\` | compiled core DLL cache, and the script extracted by the `.exe` |
 
