@@ -655,6 +655,7 @@
                     <WrapPanel>
                       <Button x:Name="BtnMVoltUpdate" Style="{StaticResource BtnPrimary}" Content="Check for mVolt+ updates" Margin="0,0,10,8"/>
                       <Button x:Name="BtnMVoltSite" Style="{StaticResource Btn}" Content="mVolt+ website" Margin="0,0,10,8"/>
+                      <Button x:Name="BtnMVoltTask" Style="{StaticResource Btn}" Content="Disable mVolt+ startup task" Margin="0,0,10,8"/>
                     </WrapPanel>
                     <TextBlock Text="mVolt+ (by b00nz) is kept in a mVolt+ folder next to ClevoTune and updated automatically from its GitHub releases (checked at most every 12 hours). ClevoTune runs it through its command line for the power limit when the NVIDIA driver blocks it, and for the core voltage offset." Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                   </StackPanel>

@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $AppName    = 'ClevoTune'
-$AppVersion = '1.7.0'
+$AppVersion = '1.7.1'
 
 $Self = $env:CT_SELF
 if (-not $Self) { $Self = $PSCommandPath }
@@ -314,19 +314,35 @@ function Merge-Defaults($cfg, $def) {
     }
 }
 
+function Read-ConfigFile([string]$path) {
+    $c = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($null -eq $c) { throw 'empty settings file' }
+    return $c
+}
+
 function Load-Config {
     $def = New-DefaultConfig
     if (Test-Path -LiteralPath $CfgPath) {
-        try {
-            $c = Get-Content -LiteralPath $CfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            Merge-Defaults $c $def
-            $c.profiles = @($c.profiles)
-            $c.fans = @($c.fans)
-            $c.fans = @($c.fans | Where-Object { [int]$_.index -le 2 })
-            foreach ($f in $c.fans) { $f.points = @($f.points) }
-            if ($c.profiles.Count -eq 0) { $c.profiles = $def.profiles }
-            return $c
-        } catch { }
+        $c = $null
+        try { $c = Read-ConfigFile $CfgPath } catch {
+            # unreadable (e.g. a write cut short by a power loss or reboot): keep the broken file and use the last good copy
+            Log ('Settings file unreadable: {0}' -f $_.Exception.Message)
+            try { Copy-Item -LiteralPath $CfgPath -Destination ($CfgPath + '.corrupt') -Force } catch { }
+            if (Test-Path -LiteralPath ($CfgPath + '.bak')) {
+                try { $c = Read-ConfigFile ($CfgPath + '.bak'); Log 'Settings restored from config.json.bak' } catch { }
+            }
+        }
+        if ($c) {
+            try {
+                Merge-Defaults $c $def
+                $c.profiles = @($c.profiles)
+                $c.fans = @($c.fans)
+                $c.fans = @($c.fans | Where-Object { [int]$_.index -le 2 })
+                foreach ($f in $c.fans) { $f.points = @($f.points) }
+                if ($c.profiles.Count -eq 0) { $c.profiles = $def.profiles }
+                return $c
+            } catch { }
+        }
     }
     return $def
 }
@@ -352,7 +368,12 @@ function Save-Config {
     try {
         $script:Cfg.fans = Get-FanSnapshot
         $json = $script:Cfg | ConvertTo-Json -Depth 8
-        [IO.File]::WriteAllText($CfgPath, $json, (New-Object Text.UTF8Encoding($false)))
+        # write to a temporary file first, then swap it in and keep the previous version as config.json.bak,
+        # so a power loss or reboot in the middle of a save can never leave profiles and curves half-written
+        $tmp = $CfgPath + '.tmp'
+        [IO.File]::WriteAllText($tmp, $json, (New-Object Text.UTF8Encoding($false)))
+        if (Test-Path -LiteralPath $CfgPath) { [IO.File]::Replace($tmp, $CfgPath, ($CfgPath + '.bak')) }
+        else { [IO.File]::Move($tmp, $CfgPath) }
         $script:Dirty = $false
         $script:LastSave = Get-Date
     } catch { Log ((T 'Error saving settings: {0}') -f $_.Exception.Message) }
@@ -2047,6 +2068,27 @@ function Update-MVoltUi {
     else { $ui.TxtMVolt.Text = (T 'mVolt+ not found. It is used for power limits and voltage offsets that the NVIDIA driver blocks on this GPU.'); $ui.TxtMVolt.Foreground = $Yellow }
 }
 $ui.BtnMVoltSite.Add_Click({ Start-Process 'https://github.com/b00nz/mVolt' })
+$ui.BtnMVoltTask.Add_Click({ Invoke-UiOperation {
+    # mVolt+ can register its own logon task (--apply-startup-profile) that pops up "No startup profile is configured";
+    # ClevoTune applies power/clock/voltage itself, so offer to disable that task (never ClevoTune's own task)
+    $found = @()
+    try {
+        $found = @(Get-ScheduledTask -ErrorAction Stop | Where-Object {
+            $_.TaskName -ne $TaskName -and $_.State -ne 'Disabled' -and
+            (@($_.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join ' ') -match 'apply-startup-profile'
+        })
+    } catch { Set-Status ((T 'Could not list scheduled tasks: {0}') -f $_.Exception.Message) $Yellow; return }
+    if ($found.Count -eq 0) { Set-Status (T 'No active mVolt+ startup task found') $Green; return }
+    $names = ($found | ForEach-Object { $_.TaskPath + $_.TaskName }) -join "`n"
+    $r = [System.Windows.MessageBox]::Show(((T "Disable these mVolt+ startup tasks?`n`n{0}`n`nYou can re-enable them in Task Scheduler.") -f $names), $AppName, 'YesNo', 'Question')
+    if ($r -ne 'Yes') { return }
+    $n = 0
+    foreach ($t in $found) {
+        try { [void](Disable-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction Stop); $n++; Log ((T 'mVolt+ startup task disabled: {0}') -f $t.TaskName) }
+        catch { Log ((T 'Could not disable task {0}: {1}') -f $t.TaskName, $_.Exception.Message) }
+    }
+    Set-Status ((T 'mVolt+ startup tasks disabled: {0}') -f $n) $(if ($n -eq $found.Count) { $Green } else { $Yellow })
+} })
 $ui.BtnMVoltUpdate.Add_Click({ Invoke-UiOperation {
     $win.Cursor = [System.Windows.Input.Cursors]::Wait
     try {

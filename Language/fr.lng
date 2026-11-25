@@ -5,7 +5,7 @@
 name=Français
 code=fr
 base=en
-version=1.7.0
+version=1.7.1
 
 [strings]
 Monitor=Écran
@@ -18,6 +18,13 @@ GPU reset: previous voltage and clock-lock values are unverified=GPU réinitiali
 Power requested {0} W; enforced {1} W=Puissance demandée {0} W ; imposée {1} W
 Temperature unavailable: EC auto=Température indisponible : EC auto
 Center=Centre
+Disable mVolt+ startup task=Désactiver la tâche de démarrage de mVolt+
+Could not list scheduled tasks: {0}=Impossible de lister les tâches planifiées : {0}
+No active mVolt+ startup task found=Aucune tâche de démarrage de mVolt+ active trouvée
+Disable these mVolt+ startup tasks?`n`n{0}`n`nYou can re-enable them in Task Scheduler.=Désactiver ces tâches de démarrage de mVolt+ ?`n`n{0}`n`nVous pouvez les réactiver dans le Planificateur de tâches.
+mVolt+ startup task disabled: {0}=Tâche de démarrage de mVolt+ désactivée : {0}
+Could not disable task {0}: {1}=Impossible de désactiver la tâche {0} : {1}
+mVolt+ startup tasks disabled: {0}=Tâches de démarrage de mVolt+ désactivées : {0}
 Re-check power limits=Revérifier les limites de puissance
 Power request unverified=Demande de puissance non vérifiée
 Power limits rechecked; no tuning applied=Limites de puissance revérifiées ; aucun réglage appliqué
