@@ -4,6 +4,7 @@ All notable changes to ClevoTune. Versions follow [Semantic Versioning](https://
 
 ## v1.7.1
 - Profiles and fan curves are now saved safely: settings are written to a temporary file and swapped in, keeping the previous version as `config.json.bak`. If `config.json` is ever unreadable (for example after a power loss or reboot during a save), ClevoTune restores the backup instead of silently starting with empty settings and overwriting your profiles. The broken file is kept as `config.json.corrupt`.
+- Settings → mVolt+: **Disable mVolt+ startup task**. mVolt+ can register its own logon task (`--apply-startup-profile`) that shows "No startup profile is configured for this BIOS" at every sign-in. The button lists such tasks, asks for confirmation and disables them. ClevoTune's own task is never touched, and the mVolt+ task can be re-enabled in Task Scheduler.
 
 ## v1.7.0
 - Saving a profile now also stores the fan curves (mode, source, fixed % and points of both fans). Loading a profile, applying it from the tray, and the on-open/startup profile restore its curves too. Older profiles without curves keep the current ones.

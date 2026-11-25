@@ -36,6 +36,13 @@ GPU reset: previous voltage and clock-lock values are unverified	GPU reiniciada:
 Power requested {0} W; enforced {1} W	Potência pedida {0} W; aplicada {1} W	Puissance demandée {0} W ; imposée {1} W	Potencia solicitada {0} W; aplicada {1} W	Leistung angefordert {0} W; erzwungen {1} W	Potenza richiesta {0} W; imposta {1} W
 Temperature unavailable: EC auto	Temperatura indisponível: EC auto	Température indisponible : EC auto	Temperatura no disponible: EC auto	Temperatur nicht verfügbar: EC automatisch	Temperatura non disponibile: EC automatico
 Center	Centro	Centre	Centro	Mitte	Centro
+Disable mVolt+ startup task	Desativar tarefa de arranque do mVolt+	Désactiver la tâche de démarrage de mVolt+	Desactivar la tarea de inicio de mVolt+	mVolt+-Autostart-Aufgabe deaktivieren	Disattiva l'attività di avvio di mVolt+
+Could not list scheduled tasks: {0}	Não foi possível listar as tarefas agendadas: {0}	Impossible de lister les tâches planifiées : {0}	No se pudieron listar las tareas programadas: {0}	Geplante Aufgaben konnten nicht aufgelistet werden: {0}	Impossibile elencare le attività pianificate: {0}
+No active mVolt+ startup task found	Nenhuma tarefa de arranque do mVolt+ ativa encontrada	Aucune tâche de démarrage de mVolt+ active trouvée	No se encontró ninguna tarea de inicio de mVolt+ activa	Keine aktive mVolt+-Autostart-Aufgabe gefunden	Nessuna attività di avvio di mVolt+ attiva trovata
+Disable these mVolt+ startup tasks?`n`n{0}`n`nYou can re-enable them in Task Scheduler.	Desativar estas tarefas de arranque do mVolt+?`n`n{0}`n`nPode reativá-las no Agendador de Tarefas.	Désactiver ces tâches de démarrage de mVolt+ ?`n`n{0}`n`nVous pouvez les réactiver dans le Planificateur de tâches.	¿Desactivar estas tareas de inicio de mVolt+?`n`n{0}`n`nPuedes volver a activarlas en el Programador de tareas.	Diese mVolt+-Autostart-Aufgaben deaktivieren?`n`n{0}`n`nSie können sie in der Aufgabenplanung wieder aktivieren.	Disattivare queste attività di avvio di mVolt+?`n`n{0}`n`nPuoi riattivarle in Utilità di pianificazione.
+mVolt+ startup task disabled: {0}	Tarefa de arranque do mVolt+ desativada: {0}	Tâche de démarrage de mVolt+ désactivée : {0}	Tarea de inicio de mVolt+ desactivada: {0}	mVolt+-Autostart-Aufgabe deaktiviert: {0}	Attività di avvio di mVolt+ disattivata: {0}
+Could not disable task {0}: {1}	Não foi possível desativar a tarefa {0}: {1}	Impossible de désactiver la tâche {0} : {1}	No se pudo desactivar la tarea {0}: {1}	Aufgabe {0} konnte nicht deaktiviert werden: {1}	Impossibile disattivare l'attività {0}: {1}
+mVolt+ startup tasks disabled: {0}	Tarefas de arranque do mVolt+ desativadas: {0}	Tâches de démarrage de mVolt+ désactivées : {0}	Tareas de inicio de mVolt+ desactivadas: {0}	mVolt+-Autostart-Aufgaben deaktiviert: {0}	Attività di avvio di mVolt+ disattivate: {0}
 Re-check power limits	Rever limites de potência	Revérifier les limites de puissance	Volver a comprobar los límites de potencia	Leistungslimits erneut prüfen	Ricontrolla i limiti di potenza
 Power request unverified	Pedido de potência não verificado	Demande de puissance non vérifiée	Solicitud de potencia sin verificar	Leistungsanforderung nicht verifiziert	Richiesta di potenza non verificata
 Power limits rechecked; no tuning applied	Limites de potência revistos; sem aplicar ajustes	Limites de puissance revérifiées ; aucun réglage appliqué	Límites de potencia comprobados; sin aplicar ajustes	Leistungslimits erneut geprüft; keine Einstellungen angewendet	Limiti di potenza ricontrollati; nessuna regolazione applicata
@@ -2748,6 +2755,7 @@ $Xaml = @'
                     <WrapPanel>
                       <Button x:Name="BtnMVoltUpdate" Style="{StaticResource BtnPrimary}" Content="Check for mVolt+ updates" Margin="0,0,10,8"/>
                       <Button x:Name="BtnMVoltSite" Style="{StaticResource Btn}" Content="mVolt+ website" Margin="0,0,10,8"/>
+                      <Button x:Name="BtnMVoltTask" Style="{StaticResource Btn}" Content="Disable mVolt+ startup task" Margin="0,0,10,8"/>
                     </WrapPanel>
                     <TextBlock Text="mVolt+ (by b00nz) is kept in a mVolt+ folder next to ClevoTune and updated automatically from its GitHub releases (checked at most every 12 hours). ClevoTune runs it through its command line for the power limit when the NVIDIA driver blocks it, and for the core voltage offset." Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                   </StackPanel>
@@ -4085,6 +4093,27 @@ function Update-MVoltUi {
     else { $ui.TxtMVolt.Text = (T 'mVolt+ not found. It is used for power limits and voltage offsets that the NVIDIA driver blocks on this GPU.'); $ui.TxtMVolt.Foreground = $Yellow }
 }
 $ui.BtnMVoltSite.Add_Click({ Start-Process 'https://github.com/b00nz/mVolt' })
+$ui.BtnMVoltTask.Add_Click({ Invoke-UiOperation {
+    # mVolt+ can register its own logon task (--apply-startup-profile) that pops up "No startup profile is configured";
+    # ClevoTune applies power/clock/voltage itself, so offer to disable that task (never ClevoTune's own task)
+    $found = @()
+    try {
+        $found = @(Get-ScheduledTask -ErrorAction Stop | Where-Object {
+            $_.TaskName -ne $TaskName -and $_.State -ne 'Disabled' -and
+            (@($_.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join ' ') -match 'apply-startup-profile'
+        })
+    } catch { Set-Status ((T 'Could not list scheduled tasks: {0}') -f $_.Exception.Message) $Yellow; return }
+    if ($found.Count -eq 0) { Set-Status (T 'No active mVolt+ startup task found') $Green; return }
+    $names = ($found | ForEach-Object { $_.TaskPath + $_.TaskName }) -join "`n"
+    $r = [System.Windows.MessageBox]::Show(((T "Disable these mVolt+ startup tasks?`n`n{0}`n`nYou can re-enable them in Task Scheduler.") -f $names), $AppName, 'YesNo', 'Question')
+    if ($r -ne 'Yes') { return }
+    $n = 0
+    foreach ($t in $found) {
+        try { [void](Disable-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction Stop); $n++; Log ((T 'mVolt+ startup task disabled: {0}') -f $t.TaskName) }
+        catch { Log ((T 'Could not disable task {0}: {1}') -f $t.TaskName, $_.Exception.Message) }
+    }
+    Set-Status ((T 'mVolt+ startup tasks disabled: {0}') -f $n) $(if ($n -eq $found.Count) { $Green } else { $Yellow })
+} })
 $ui.BtnMVoltUpdate.Add_Click({ Invoke-UiOperation {
     $win.Cursor = [System.Windows.Input.Cursors]::Wait
     try {

@@ -241,7 +241,7 @@ A small always-on-top text box with CPU (temp/load/W), GPU (temp/load/W), GPU cl
 
 ### Settings tab
 
-- **mVolt+**: shows the installed mVolt+ version and path. **Check for mVolt+ updates** checks GitHub now and installs a newer release; **mVolt+ website** opens the project page. See [mVolt+ integration](#mvolt-integration).
+- **mVolt+**: shows the installed mVolt+ version and path. **Check for mVolt+ updates** checks GitHub now and installs a newer release; **mVolt+ website** opens the project page. **Disable mVolt+ startup task** finds mVolt+'s own logon task (`--apply-startup-profile`), which shows "No startup profile is configured for this BIOS" at every sign-in, and disables it after you confirm. ClevoTune applies your settings itself, and the task can be re-enabled in Task Scheduler. See [mVolt+ integration](#mvolt-integration).
 
 - **Hardware access (PawnIO)**: status of the driver, the EC module, the MSR module, NVML and NVAPI. Buttons:
   - **PawnIO website**

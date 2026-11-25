@@ -2068,6 +2068,27 @@ function Update-MVoltUi {
     else { $ui.TxtMVolt.Text = (T 'mVolt+ not found. It is used for power limits and voltage offsets that the NVIDIA driver blocks on this GPU.'); $ui.TxtMVolt.Foreground = $Yellow }
 }
 $ui.BtnMVoltSite.Add_Click({ Start-Process 'https://github.com/b00nz/mVolt' })
+$ui.BtnMVoltTask.Add_Click({ Invoke-UiOperation {
+    # mVolt+ can register its own logon task (--apply-startup-profile) that pops up "No startup profile is configured";
+    # ClevoTune applies power/clock/voltage itself, so offer to disable that task (never ClevoTune's own task)
+    $found = @()
+    try {
+        $found = @(Get-ScheduledTask -ErrorAction Stop | Where-Object {
+            $_.TaskName -ne $TaskName -and $_.State -ne 'Disabled' -and
+            (@($_.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join ' ') -match 'apply-startup-profile'
+        })
+    } catch { Set-Status ((T 'Could not list scheduled tasks: {0}') -f $_.Exception.Message) $Yellow; return }
+    if ($found.Count -eq 0) { Set-Status (T 'No active mVolt+ startup task found') $Green; return }
+    $names = ($found | ForEach-Object { $_.TaskPath + $_.TaskName }) -join "`n"
+    $r = [System.Windows.MessageBox]::Show(((T "Disable these mVolt+ startup tasks?`n`n{0}`n`nYou can re-enable them in Task Scheduler.") -f $names), $AppName, 'YesNo', 'Question')
+    if ($r -ne 'Yes') { return }
+    $n = 0
+    foreach ($t in $found) {
+        try { [void](Disable-ScheduledTask -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction Stop); $n++; Log ((T 'mVolt+ startup task disabled: {0}') -f $t.TaskName) }
+        catch { Log ((T 'Could not disable task {0}: {1}') -f $t.TaskName, $_.Exception.Message) }
+    }
+    Set-Status ((T 'mVolt+ startup tasks disabled: {0}') -f $n) $(if ($n -eq $found.Count) { $Green } else { $Yellow })
+} })
 $ui.BtnMVoltUpdate.Add_Click({ Invoke-UiOperation {
     $win.Cursor = [System.Windows.Input.Cursors]::Wait
     try {
